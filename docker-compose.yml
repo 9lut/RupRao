@@ -1,0 +1,151 @@
+name: ai-photo-finder
+
+x-api-common: &api-common
+  build:
+    context: ./apps/api
+    dockerfile: Dockerfile
+  image: ai-photo-finder-api
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    MODEL_DIR: /app/models
+  volumes:
+    - ./data/models:/app/models
+  networks:
+    - ai-photo-network
+
+services:
+  # The ONLY way in. web/api/minio publish no public ports; Caddy routes on one origin:
+  #   /  -> web:3000    /api/* -> api:8000    /storage/* -> minio:9000
+  # Open:  https://localhost          (HTTPS, also from other devices via SITE_ADDRESS)
+  #        http://localhost:3000      (plain HTTP, this machine only)
+  caddy:
+    image: caddy:2-alpine
+    container_name: ai-photo-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "127.0.0.1:3000:8080"   # http://localhost:3000 -> Caddy (full app incl. /api)
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - web
+      - api
+    networks:
+      - ai-photo-network
+
+  web:
+    # No published port on purpose: reach it through caddy (see above).
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: ai-photo-web
+    restart: unless-stopped
+    networks:
+      - ai-photo-network
+
+  api:
+    <<: *api-common
+    container_name: ai-photo-api
+    environment:
+      MODEL_DIR: /app/models
+      API_ROOT_PATH: /api
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  worker:
+    <<: *api-common
+    command: python -m app.worker
+    depends_on:
+      api:
+        condition: service_healthy  # API applies DB migrations first
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ai-photo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-photo_db}
+      POSTGRES_USER: ${POSTGRES_USER:-photo_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-photo_password}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-photo_user} -d ${POSTGRES_DB:-photo_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ai-photo-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: ai-photo-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - ai-photo-network
+
+  minio:
+    # MinIO stopped publishing minio/minio on Docker Hub; Chainguard keeps an up-to-date build.
+    image: cgr.dev/chainguard/minio:latest
+    container_name: ai-photo-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio_password}
+      MC_HOST_local: http://${MINIO_ROOT_USER:-minio}:${MINIO_ROOT_PASSWORD:-minio_password}@localhost:9000
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - minio-data:/data
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - ai-photo-network
+
+volumes:
+  postgres-data:
+  minio-data:
+  redis-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  ai-photo-network:
+    driver: bridge

@@ -1,0 +1,49 @@
+# One HTTPS origin for everything:
+#   /          -> Next.js web
+#   /api/*     -> FastAPI (prefix stripped)
+#   /storage/* -> MinIO (prefix stripped; presigned signatures stay valid because Host is preserved)
+#
+# SITE_ADDRESS can list several hosts, e.g. "localhost, 192.168.1.50" to open it from phones on
+# your Wi-Fi. `tls internal` = Caddy's own local CA (browsers warn until you trust it).
+{
+	admin off
+}
+
+(app) {
+	encode zstd gzip
+
+	request_body {
+		max_size 1100MB
+	}
+
+	handle_path /api/* {
+		reverse_proxy api:8000
+	}
+
+	handle_path /storage/* {
+		reverse_proxy minio:9000
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(self), microphone=(), geolocation=()"
+		-Server
+	}
+}
+
+{$SITE_ADDRESS:localhost} {
+	tls internal
+	import app
+	header Strict-Transport-Security "max-age=31536000"
+}
+
+# Plain HTTP for this machine only: compose publishes it as 127.0.0.1:3000 -> :8080.
+# localhost is still a secure context, so the camera works here too.
+http://localhost:8080 {
+	import app
+}
