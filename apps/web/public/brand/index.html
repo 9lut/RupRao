@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>รูปเรา Brand</title>
+<meta name="author" content="Lutfee">
+<link rel="icon" href="/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#121211; --paper:#FFFFFF; --blue:#005DFB; --mist:#F6F6F5; --line:#ECECEC; --muted:#6B6B6B; }
+  * { box-sizing:border-box; margin:0 }
+  body { background:var(--paper); color:var(--ink); font-family:Inter,"Noto Sans Thai",system-ui,sans-serif; -webkit-font-smoothing:antialiased; line-height:1.6 }
+  .wrap { max-width:1080px; margin:0 auto; padding:0 24px }
+  header.top { border-bottom:1px solid var(--line) }
+  header.top .wrap { height:56px; display:flex; align-items:center; justify-content:space-between; font-size:13px; color:var(--muted) }
+  section { padding:64px 0; border-bottom:1px solid var(--line) }
+  .eyebrow { font-size:12px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted) }
+  h2 { font-size:28px; font-weight:600; letter-spacing:-.01em; margin-top:8px }
+  p.note { font-size:14px; color:var(--muted); max-width:640px; margin-top:12px }
+  .hero { display:grid; grid-template-columns:1fr 1fr; gap:40px; align-items:center }
+  @media (max-width:760px){ .hero { grid-template-columns:1fr } }
+  .hero img.logo { width:100%; max-width:440px; height:auto; display:block; margin:0 auto }
+  .lead { font-size:18px; color:#3a3a3a; margin-top:16px; max-width:520px }
+  .grid { display:grid; gap:16px; margin-top:28px }
+  .g3 { grid-template-columns:repeat(3,minmax(0,1fr)) } .g4 { grid-template-columns:repeat(4,minmax(0,1fr)) } .g6 { grid-template-columns:repeat(6,minmax(0,1fr)) }
+  @media (max-width:760px){ .g3,.g4 { grid-template-columns:1fr } .g6 { grid-template-columns:repeat(3,minmax(0,1fr)) } }
+  .tile { border:1px solid var(--line); border-radius:28px; padding:28px; display:flex; flex-direction:column; gap:16px; min-height:240px }
+  .tile .stage { flex:1; display:grid; place-items:center }
+  .tile .cap { font-size:13px; color:var(--muted) } .tile .cap b { color:var(--ink); font-weight:500 }
+  .mist { background:var(--mist); border-color:var(--mist) }
+  .dark { background:#121211; border-color:#121211 } .dark .cap { color:#9a9a9a } .dark .cap b { color:#fff }
+  .chipwhite { background:#fff; border-radius:28px; padding:22px; display:inline-block }
+  .story { display:grid; gap:18px; margin-top:28px }
+  .story div { display:grid; grid-template-columns:28px 1fr; gap:14px }
+  .story .dot { width:28px; height:28px; border-radius:999px; display:grid; place-items:center; font-size:13px; font-weight:600; background:var(--mist) }
+  .story b { display:block } .story span { font-size:14px; color:var(--muted) }
+  .swatch { border-radius:20px; overflow:hidden; border:1px solid var(--line) }
+  .swatch .chip { height:110px } .swatch .meta { padding:12px 14px; font-size:13px } .swatch .meta b { display:block }
+  .swatch code { font-family:ui-monospace,Menlo,monospace; font-size:12px; color:var(--muted) }
+  .sizes { display:flex; align-items:flex-end; gap:28px; flex-wrap:wrap }
+  .sizes figure { display:flex; flex-direction:column; align-items:center; gap:8px; font-size:12px; color:var(--muted) }
+  .rule { display:flex; gap:12px; align-items:flex-start; font-size:14px }
+  .badge { flex:none; width:22px; height:22px; border-radius:999px; display:grid; place-items:center; font-size:12px; color:#fff }
+  .yes { background:#10b981 }
+  .type-row { display:grid; grid-template-columns:200px 1fr; gap:24px; padding:22px 0; border-top:1px solid var(--line); align-items:baseline }
+  .type-row:first-of-type { border-top:0 } .type-row .k { font-size:13px; color:var(--muted) }
+  @media (max-width:760px){ .type-row { grid-template-columns:1fr; gap:6px } }
+  .name { font-family:"Noto Sans Thai"; font-weight:600; font-size:34px } .name .rao { color:var(--blue) }
+  .dont { position:relative } .dont::after { content:""; position:absolute; left:18px; right:18px; top:50%; border-top:2px solid #ef4444; transform:rotate(-12deg); opacity:.7 }
+  .credit { display:flex; align-items:center; gap:14px; padding:20px; border-radius:22px; background:var(--mist); margin-top:28px }
+  footer { padding:36px 0 56px; font-size:13px; color:var(--muted) } a { color:inherit }
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap"><span>รูปเรา · Brand Guidelines</span><span>v2.0 · พัฒนาโดย Lutfee</span></div></header>
+
+<section>
+  <div class="wrap hero">
+    <div>
+      <div class="eyebrow">Brand identity</div>
+      <p class="lead">ค้นหารูปของคุณจากใบหน้า — แบรนด์ที่สดใส เป็นมิตร ให้รูปของผู้คนเป็นพระเอก</p>
+      <div class="credit">
+        <img src="ruprao-mark.png" width="44" height="44" alt="">
+        <div><b>พัฒนาโดย Lutfee</b><div style="font-size:13px;color:var(--muted)">ออกแบบและพัฒนาระบบ รูปเรา (RupRao)</div></div>
+      </div>
+    </div>
+    <img class="logo" src="ruprao-logo.png" alt="รูปเรา RupRao">
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">01 · Concept</div>
+    <h2>สแกนหน้า แล้วเจอรูปของคุณ</h2>
+    <div class="story">
+      <div><span class="dot">1</span><p><b>กรอบสแกนมุมโค้ง</b><span>การค้นหาด้วยใบหน้า — สื่อฟังก์ชันหลักได้ทันที</span></p></div>
+      <div><span class="dot">2</span><p><b>หน้าคนยิ้ม</b><span>ผู้ร่วมงาน “เรา” ทุกคน — อบอุ่น เป็นมิตร ไม่ใช่กล้องจ้องมอง</span></p></div>
+      <div><span class="dot" style="background:#005DFB;color:#fff">3</span><p><b>แว่นขยายสีฟ้า</b><span>ค้นหาแล้วเจอ — สีฟ้าคือจุดจำของแบรนด์ ใช้กับ “Rao” และรอยยิ้มใต้ “รูปเรา”</span></p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">02 · Logo</div>
+    <h2>รูปแบบโลโก้</h2>
+    <div class="grid g3">
+      <div class="tile"><div class="stage"><img src="ruprao-logo.png" alt="" style="width:80%"></div><div class="cap"><b>Stacked</b> · โปสเตอร์ QR ปกสไลด์</div></div>
+      <div class="tile"><div class="stage"><img src="ruprao-mark.png" alt="" style="width:55%"></div><div class="cap"><b>Symbol</b> · พื้นที่จัตุรัส โปรไฟล์</div></div>
+      <div class="tile"><div class="stage"><img src="ruprao-wordmark.png" alt="" style="width:90%"></div><div class="cap"><b>Wordmark</b> · ป้าย แบนเนอร์แนวนอน</div></div>
+      <div class="tile mist"><div class="stage"><img src="icon-512.png" alt="" style="width:46%;border-radius:22%;box-shadow:0 10px 30px -12px rgba(0,0,0,.25)"></div><div class="cap"><b>App icon</b> · หน้าจอโฮม favicon</div></div>
+      <div class="tile dark"><div class="stage"><span class="chipwhite"><img src="ruprao-mark.png" alt="" width="120"></span></div><div class="cap"><b>บนพื้นเข้ม</b> · วางบนแผ่นขาวเสมอ</div></div>
+      <div class="tile"><div class="stage" style="gap:10px;display:flex;align-items:center;justify-content:center">
+        <img src="ruprao-mark.png" alt="" width="52"><span class="name" style="font-size:26px">รูปเรา <span style="font-family:Inter;font-size:20px">Rup<span class="rao">Rao</span></span></span>
+      </div><div class="cap"><b>Horizontal (เว็บ)</b> · header ของระบบ</div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">03 · Sizing</div>
+    <h2>ขนาดและพื้นที่ว่าง</h2>
+    <p class="note">ขนาดเล็กสุดของสัญลักษณ์ 24px · โลโก้แบบมีชื่อเล็กสุด 120px กว้าง · เว้นพื้นที่รอบโลโก้อย่างน้อยเท่าความยาวมุมกรอบสแกน</p>
+    <div class="sizes" style="margin-top:28px">
+      <figure><img src="icon-512.png" width="96" style="border-radius:22%;box-shadow:0 0 0 1px #ececec" alt="">96</figure>
+      <figure><img src="icon-192.png" width="48" style="border-radius:22%;box-shadow:0 0 0 1px #ececec" alt="">48</figure>
+      <figure><img src="ruprao-mark.png" width="32" alt="">32</figure>
+      <figure><img src="ruprao-mark.png" width="24" alt="">24 ขั้นต่ำ</figure>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">04 · Colour</div>
+    <h2>สี</h2>
+    <p class="note">ขาว–ดำเป็นหลัก สีฟ้าใช้เป็นจุดเน้น (ปุ่มสถานะ เส้นสแกน “Rao”) ให้รูปถ่ายเป็นสีสันของหน้าจอ</p>
+    <div class="grid g6">
+      <div class="swatch"><div class="chip" style="background:#121211"></div><div class="meta"><b>Ink</b><code>#121211</code></div></div>
+      <div class="swatch"><div class="chip" style="background:#005DFB"></div><div class="meta"><b>RupRao Blue</b><code>#005DFB</code></div></div>
+      <div class="swatch"><div class="chip" style="background:#FFFFFF"></div><div class="meta"><b>Paper</b><code>#FFFFFF</code></div></div>
+      <div class="swatch"><div class="chip" style="background:#F6F6F5"></div><div class="meta"><b>Mist</b><code>#F6F6F5</code></div></div>
+      <div class="swatch"><div class="chip" style="background:#ECECEC"></div><div class="meta"><b>Line</b><code>#ECECEC</code></div></div>
+      <div class="swatch"><div class="chip" style="background:#6B6B6B"></div><div class="meta"><b>Muted</b><code>#6B6B6B</code></div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">05 · Typography</div>
+    <h2>ตัวอักษร</h2>
+    <div style="margin-top:20px">
+      <div class="type-row"><div class="k">ไทย · Noto Sans Thai</div><div style="font-family:'Noto Sans Thai';font-size:36px;font-weight:600">ค้นหารูปของคุณด้วยใบหน้า</div></div>
+      <div class="type-row"><div class="k">Latin · Inter</div><div style="font-size:36px;font-weight:600;letter-spacing:-.02em">Find yourself in every photo.</div></div>
+      <div class="type-row"><div class="k">ชื่อแบรนด์</div><div class="name">รูปเรา <span style="font-family:Inter">Rup<span class="rao">Rao</span></span></div></div>
+    </div>
+    <p class="note">เขียน “รูปเรา” ไม่เว้นวรรค · “RupRao” R ใหญ่สองตัว โดย “Rao” เป็นสีฟ้าเมื่อใช้แบบสี</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">06 · Usage</div>
+    <h2>ควรและไม่ควร</h2>
+    <div class="grid g3">
+      <div class="rule"><span class="badge yes">✓</span>วางบนพื้นขาวหรือพื้นอ่อน ถ้าพื้นเข้มให้วางบนแผ่นขาว</div>
+      <div class="rule"><span class="badge yes">✓</span>ใช้ไฟล์ต้นฉบับจากโฟลเดอร์นี้เท่านั้น</div>
+      <div class="rule"><span class="badge yes">✓</span>เว้นพื้นที่ว่างรอบโลโก้ให้หายใจได้</div>
+    </div>
+    <div class="grid g4">
+      <div class="tile dont"><div class="stage"><img src="ruprao-mark.png" alt="" style="width:50%;transform:scaleX(1.4)"></div><div class="cap">ยืด / บีบสัดส่วน</div></div>
+      <div class="tile dont"><div class="stage"><img src="ruprao-mark.png" alt="" style="width:50%;filter:hue-rotate(140deg) saturate(2)"></div><div class="cap">เปลี่ยนสี</div></div>
+      <div class="tile dont"><div class="stage"><img src="ruprao-mark.png" alt="" style="width:50%;filter:drop-shadow(5px 7px 4px rgba(0,0,0,.5))"></div><div class="cap">ใส่เงา / เอฟเฟกต์</div></div>
+      <div class="tile dont dark"><div class="stage"><img src="ruprao-mark.png" alt="" style="width:50%"></div><div class="cap">วางตรงบนพื้นดำ</div></div>
+    </div>
+  </div>
+</section>
+
+<footer><div class="wrap">ไฟล์: <a href="ruprao-logo.png">logo</a> · <a href="ruprao-mark.png">symbol</a> · <a href="ruprao-wordmark.png">wordmark</a> · <a href="icon-512.png">app icon</a> · <a href="ruprao-logo-original.png">ต้นฉบับ</a> — รูปเรา (RupRao) · พัฒนาโดย Lutfee</div></footer>
+</body>
+</html>

@@ -1,0 +1,105 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-inter), var(--font-thai), ui-sans-serif, system-ui, sans-serif;
+  --color-ink: #0a0a0a;
+  --color-muted: #6b6b6b;
+  --color-line: #ececec;
+  --color-soft: #f6f6f5;
+  --color-accent: #005dfb;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: #ffffff;
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Skeleton shimmer */
+.shimmer {
+  background: linear-gradient(90deg, #f3f3f2 0%, #fafaf9 50%, #f3f3f2 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+.fade-in {
+  animation: fade-in 0.4s ease-out both;
+}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Thin, quiet range slider */
+input[type="range"].range {
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-line);
+}
+input[type="range"].range::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--color-ink);
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 1px var(--color-line);
+  cursor: pointer;
+}
+input[type="range"].range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--color-ink);
+  border: 3px solid #fff;
+  cursor: pointer;
+}
+
+/* Face scan: a glowing line that sweeps up and down inside the scan frame */
+.scan-line {
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: 16%;
+  height: 2px;
+  border-radius: 2px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, var(--color-accent) 20%, var(--color-accent) 80%, transparent);
+  box-shadow: 0 0 10px 2px rgba(0, 93, 251, 0.45);
+  animation: scan-y 1.6s ease-in-out infinite alternate;
+}
+/* Soft light trailing the line */
+.scan-line::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 18px;
+  top: -9px;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(0, 93, 251, 0.22), transparent);
+}
+.scan-line.on-photo {
+  left: 12%;
+  right: 12%;
+  box-shadow: 0 0 14px 3px rgba(0, 93, 251, 0.6);
+}
+@keyframes scan-y {
+  from { top: 16%; }
+  to { top: 84%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scan-line { animation: none; top: 50%; }
+}
+
+.pb-safe {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
