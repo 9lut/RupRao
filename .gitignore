@@ -1,0 +1,13 @@
+.env
+data/
+node_modules/
+.next/
+__pycache__/
+*.pyc
+.venv/
+backups/
+media/promo_build/
+media/tutorial_build/
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
