@@ -294,6 +294,8 @@ cp ~/RupRao/.env.example ~/RupRao/.env
      --source-ranges=$(curl -s https://www.cloudflare.com/ips-v4 | paste -sd,)
    ```
 
+> **กัน DDoS:** ตัวแอปจำกัดการเดารหัสและการยิงจาก IP เดียวได้ แต่รับปริมาณมหาศาลจากหลาย IP ไม่ได้ ต้องใช้แบบ 2 และปิดพอร์ต 80/443 ให้รับเฉพาะ Cloudflare (ขั้น 7) ใบรับรองฟรีของ Cloudflare ครอบคลุมซับโดเมนแค่ชั้นเดียว ชื่อแบบ `ruprao.guidance.example.com` จะเปิดเมฆส้มไม่ได้ ต้องใช้ชื่อชั้นเดียว เช่น `ruprao.example.com`
+>
 > **ทำไมแบบ 2 ไม่ใช้ Let's Encrypt?** เพราะตอนเปิด proxy การขอใบรับรองครั้งแรกมักติด redirect ของ Cloudflare ใบรับรอง Origin ใช้ได้ 15 ปีและไม่มีปัญหานี้
 
 ### 8.4 ใช้ซับโดเมนเพิ่ม (Caddy)

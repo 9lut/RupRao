@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  poweredByHeader: false, // no reason to tell strangers what the site runs on
   // Photos are served via presigned URLs from S3-compatible storage; keep <img> unoptimized.
   images: { unoptimized: true },
   async redirects() {
