@@ -19,10 +19,13 @@ services:
     environment:
       MODEL_DIR: /app/models
       API_ROOT_PATH: /api
+      API_DOCS: "false"  # no public map of the API
       OMP_NUM_THREADS: "2"  # e2-medium has 2 vCPUs; avoid oversubscribing ONNX Runtime
+      FACE_CONCURRENCY: "1"  # one inference already uses both vCPUs; the rest wait in the scan queue
   worker:
     <<: *logging
     mem_limit: 1200m
+    cpu_shares: 256  # scanning uploads can wait; people on the site can't
     restart: unless-stopped
     environment:
       MODEL_DIR: /app/models

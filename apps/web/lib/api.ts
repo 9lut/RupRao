@@ -118,6 +118,15 @@ export interface SearchResult {
   results: SearchMatch[];
 }
 
+export interface QueueStatus {
+  /** null = the queue is unavailable; search without one. */
+  ticket: string | null;
+  ready: boolean;
+  /** 1 = next in line, 0 = your turn. */
+  position: number;
+  eta_seconds: number;
+}
+
 export interface UploadResult {
   uploaded: AdminPhoto[];
   errors: { filename: string | null; error: string }[];
@@ -411,11 +420,17 @@ export const publicApi = {
   visit: (token: string) => json<void>(`/public/events/${token}/visit`, codeInit(null, { method: "POST" })),
   checkAccess: (token: string, code: string) =>
     json<{ ok: boolean }>(`/public/events/${token}/access`, codeInit(code, { method: "POST" })),
-  search: (token: string, code: string | null, file: File, faceIndex = 0) => {
+  joinQueue: (token: string, code: string | null) => json<QueueStatus>(`/public/events/${token}/queue`, codeInit(code, { method: "POST" })),
+  queueStatus: (ticket: string) => json<QueueStatus>(`/public/queue/${encodeURIComponent(ticket)}`),
+  leaveQueue: (ticket: string) => json<void>(`/public/queue/${encodeURIComponent(ticket)}`, { method: "DELETE" }),
+  search: (token: string, code: string | null, file: File, faceIndex = 0, ticket: string | null = null) => {
     const form = new FormData();
     form.append("file", file);
     form.append("face_index", String(faceIndex));
-    return json<SearchResult>(`/public/events/${token}/search`, codeInit(code, { method: "POST", body: form }));
+    return json<SearchResult>(
+      `/public/events/${token}/search`,
+      codeInit(code, { method: "POST", body: form, headers: ticket ? { "X-Scan-Ticket": ticket } : undefined }),
+    );
   },
   album: (token: string, code: string | null, offset = 0, limit = 60) =>
     json<{ photos: Photo[]; total: number }>(`/public/events/${token}/photos?offset=${offset}&limit=${limit}`, codeInit(code)),
@@ -430,6 +445,54 @@ export const publicApi = {
   requestRemoval: (token: string, code: string | null, body: { photo_ids: string[]; contact?: string; note?: string }) =>
     json<{ id: string; photo_count: number }>(`/public/events/${token}/removal-requests`, codeInit(code, { method: "POST", ...jsonBody(body) })),
 };
+
+/** Shrink a large gallery photo before uploading: faster on venue Wi-Fi and less for the server to decode. */
+export async function shrinkSelfie(file: File, maxSide = 1600): Promise<File> {
+  try {
+    const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+    const scale = maxSide / Math.max(bitmap.width, bitmap.height);
+    if (scale >= 1) return file;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
+    return blob ? new File([blob], "selfie.jpg", { type: "image/jpeg" }) : file;
+  } catch {
+    return file; // an unusual format: let the server deal with the original
+  }
+}
+
+/**
+ * Wait in line for a face search; resolves with the ticket when it's this browser's turn. The selfie
+ * stays here until then. `onWait` reports the place in line; stops with null if `cancelled` turns true.
+ */
+export async function waitForScanTurn(
+  token: string,
+  code: string | null,
+  onWait: (s: QueueStatus) => void,
+  cancelled: () => boolean,
+): Promise<string | null> {
+  let s = await publicApi.joinQueue(token, code);
+  while (!s.ready) {
+    onWait(s);
+    // People far back don't need to ask as often, and a crowd asking less keeps the server free.
+    await new Promise((r) => setTimeout(r, Math.min(5000, 1500 + s.position * 100)));
+    if (cancelled()) {
+      if (s.ticket) publicApi.leaveQueue(s.ticket).catch(() => {});
+      return null;
+    }
+    try {
+      s = await publicApi.queueStatus(s.ticket!);
+    } catch (e) {
+      // Fell out of line (phone was locked for a while): get back in. Brief network loss: just ask again.
+      if (e instanceof ApiError && e.status === 404) s = await publicApi.joinQueue(token, code);
+      else if (!(e instanceof ApiError && e.status === 0)) throw e;
+    }
+  }
+  return s.ticket;
+}
 
 /** Accepts a share link, a bare token, or "…/e/<token>" pasted from anywhere. */
 export function parseShareToken(input: string): string | null {

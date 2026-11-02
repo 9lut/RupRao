@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 from app.services.face_service import det_size_for
 from app.services.rate_limit import hit
-from app.services.storage_service import with_path_prefix
+from app.services.storage_service import _signed_url, storage, with_path_prefix
 from app.services.usage import disk_usage, upload_block
 from app.services.visitors import visitor_key
 
@@ -101,6 +101,24 @@ def test_upload_block_keeps_disk_space_free(monkeypatch):
     assert upload_block(FakeUsageDb(), event, 100) is None
     monkeypatch.setattr("app.services.usage.disk_usage", lambda: {"total": 100 * gb, "used": 99 * gb, "free": gb})
     assert "เซิร์ฟเวอร์" in upload_block(FakeUsageDb(), event, 100)
+
+
+def test_signed_links_are_reused_then_renewed(monkeypatch):
+    clock = [1_000_000.0]
+    monkeypatch.setattr("app.services.storage_service.time.time", lambda: clock[0])
+    monkeypatch.setattr("app.services.storage_service.settings.presigned_url_ttl", 3600)
+    monkeypatch.setattr("app.services.storage_service.settings.s3_public_url", "https://example.test/storage")
+    key = f"events/{uuid.uuid4()}/thumb.webp"
+    first = storage.get_url(key)
+    assert first.startswith("https://example.test/storage/")
+    assert storage.get_url(key) == first  # same link, so browsers can cache the image
+    assert storage.get_url(key, download_name="a.jpg") != first  # a download is a different link
+    signed = _signed_url.cache_info().misses
+    storage.get_url(key)
+    assert _signed_url.cache_info().misses == signed  # reused, no signing
+    clock[0] += 1800
+    storage.get_url(key)
+    assert _signed_url.cache_info().misses == signed + 1  # renewed before it could expire
 
 
 def test_disk_usage_is_none_without_the_volume(monkeypatch):

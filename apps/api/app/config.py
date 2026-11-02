@@ -73,6 +73,23 @@ class Settings(BaseSettings):
     rate_removal_per_hour: int = 60
     rate_zip_per_hour: int = 300
     rate_visitor_per_minute: int = 1200  # above this, visits simply stop being counted
+    rate_public_per_minute: int = 6000  # all attendee API calls; one venue Wi-Fi is one IP, so this is high
+    rate_queue_per_minute: int = 120
+
+    # --- Wrong guesses. Only failures count, so normal use never reaches these. ---
+    login_failures_per_ip: int = 30  # per hour
+    login_failures_per_account: int = 20  # per 15 minutes, from anywhere
+    code_failures_per_event: int = 20  # one IP on one event, per 15 minutes (a 4-digit code has 10,000 values)
+    token_misses_per_ip: int = 60  # unknown share links, per 10 minutes
+
+    # --- Scan queue ---
+    scan_queue_max: int = 1000
+    scan_ticket_idle_seconds: int = 30  # browser stopped asking (tab closed, phone locked)
+    scan_turn_seconds: int = 60  # time to upload the selfie once at the front
+    scan_default_seconds: float = 4  # until real searches give an average
+
+    max_concurrent_zips: int = 4  # each one holds up to 100 originals on disk and in memory
+    api_docs: bool = True  # Swagger at /docs; the public server turns it off
 
 
 @lru_cache

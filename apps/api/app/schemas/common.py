@@ -200,6 +200,13 @@ class SearchResult(BaseModel):
     results: list[SearchMatch]
 
 
+class QueueStatus(BaseModel):
+    ticket: str | None  # None = the queue is unavailable; search without one
+    ready: bool
+    position: int  # 1 = next in line; 0 = your turn
+    eta_seconds: int
+
+
 class PhotoIds(BaseModel):
     photo_ids: list[uuid.UUID] = Field(min_length=1, max_length=500)
 

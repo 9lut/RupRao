@@ -2,6 +2,7 @@
 optionally protected by an access code sent in the X-Event-Code header."""
 
 import hmac
+import threading
 import time
 import uuid
 
@@ -16,9 +17,9 @@ from app.config import settings
 from app.db.database import get_db
 from app.db.models import Event, Photo, RemovalRequest
 from app.schemas.common import (
-    EventPublicOut, FaceBox, PhotoIds, PublicPhotoOut, PublicPhotoPage, RemovalCreate, SearchMatch, SearchResult,
+    EventPublicOut, FaceBox, PhotoIds, PublicPhotoOut, PublicPhotoPage, QueueStatus, RemovalCreate, SearchMatch, SearchResult,
 )
-from app.services import rate_limit, visitors
+from app.services import rate_limit, scan_queue, visitors
 from app.services.auth import sign_value
 from app.services.face_service import FaceBusy, face_service
 from app.services.image_service import ImageValidationError, load_image, to_bgr_array
@@ -27,13 +28,29 @@ from app.services.storage_service import storage
 from app.services.watermark import apply_watermark, watermark_options
 from app.services.zip_service import build_zip
 
-router = APIRouter(prefix="/public", tags=["public"])
+def _public_limit(request: Request) -> None:
+    rate_limit.enforce(request, "public", settings.rate_public_per_minute, 60)
 
 
-def _event_by_token(db: Session, token: str) -> Event:
+router = APIRouter(prefix="/public", tags=["public"], dependencies=[Depends(_public_limit)])
+
+# Zips sit on the server until sent, so a burst of them could exhaust memory and disk.
+_zip_gate = threading.BoundedSemaphore(settings.max_concurrent_zips)
+
+
+def _event_by_token(db: Session, token: str, request: Request | None = None) -> Event:
+    """`request`: count misses against this visitor, so share links can't be guessed by trying them."""
+    ip = rate_limit.client_ip(request) if request else None
+    if ip:
+        rate_limit.refuse_after_failures("token", ip, settings.token_misses_per_ip)
     event = db.scalar(select(Event).where(Event.share_token == token.lower()))
     if event is None or (event.expires_at is not None and event.expires_at.timestamp() < time.time()):
+        if ip:
+            rate_limit.add_failure("token", ip, 600)
         raise HTTPException(status.HTTP_404_NOT_FOUND, "ไม่พบอีเวนต์ หรือลิงก์หมดอายุแล้ว")
+    # Read-only, so end the transaction now: a request shouldn't hold a pooled connection while it
+    # does anything else. Under load those waits add up until the pool runs dry and requests fail.
+    db.commit()
     return event
 
 
@@ -45,21 +62,30 @@ def _check_code(event: Event, code: str | None) -> None:
 def accessible_event(
     token: str, request: Request, x_event_code: str | None = Header(None), db: Session = Depends(get_db)
 ) -> Event:
-    event = _event_by_token(db, token)
+    event = _event_by_token(db, token, request)
     if event.access_code:
         rate_limit.enforce(request, "access", settings.rate_access_per_minute, 60)
-    _check_code(event, x_event_code)
+        who = f"{rate_limit.client_ip(request)}:{event.id}"
+        rate_limit.refuse_after_failures("code", who, settings.code_failures_per_event)
+        try:
+            _check_code(event, x_event_code)
+        except HTTPException:
+            rate_limit.add_failure("code", who, 900)
+            raise
     return event
 
 
 def _photos_in_event(db: Session, event: Event, ids: list[uuid.UUID]) -> list[Photo]:
-    return list(db.scalars(select(Photo).where(Photo.event_id == event.id, Photo.id.in_(ids))).all())
+    photos = list(db.scalars(select(Photo).where(Photo.event_id == event.id, Photo.id.in_(ids))).all())
+    db.commit()  # see _event_by_token
+    return photos
 
 
 @router.get("/events/{token}", response_model=EventPublicOut)
-def get_event(token: str, db: Session = Depends(get_db)):
-    event = _event_by_token(db, token)
+def get_event(token: str, request: Request, db: Session = Depends(get_db)):
+    event = _event_by_token(db, token, request)
     count = db.scalar(select(func.count(Photo.id)).where(Photo.event_id == event.id))
+    db.commit()  # see _event_by_token
     return EventPublicOut(
         name=event.name,
         description=event.description,
@@ -91,6 +117,7 @@ def album(
         select(Photo).where(Photo.event_id == event.id).order_by(Photo.created_at.desc(), Photo.id)
         .offset(offset).limit(limit)
     ).all()
+    db.commit()  # see _event_by_token
     return PublicPhotoPage(photos=[public_photo_out(p) for p in photos], total=total)
 
 
@@ -108,7 +135,41 @@ def check_access(event: Event = Depends(accessible_event)):
 @router.post("/events/{token}/visit", status_code=status.HTTP_204_NO_CONTENT)
 def visit(token: str, request: Request, db: Session = Depends(get_db)):
     """Someone opened the event page (the web app calls this once per page load)."""
-    visitors.record(db, request, _event_by_token(db, token).id)
+    visitors.record(db, request, _event_by_token(db, token, request).id)
+
+
+# ---------- Scan queue (see services/scan_queue.py) ----------
+
+@router.post("/events/{token}/queue", response_model=QueueStatus)
+def join_queue(request: Request, event: Event = Depends(accessible_event)):
+    rate_limit.enforce(request, "queue", settings.rate_queue_per_minute, 60)
+    try:
+        return scan_queue.join()
+    except scan_queue.QueueFull as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "ตอนนี้มีคนรอคิวเต็มแล้ว ลองใหม่อีกครั้งในอีกสักครู่", headers={"Retry-After": "30"}
+        ) from exc
+
+
+@router.get("/queue/{ticket}", response_model=QueueStatus)
+def queue_status(ticket: str):
+    status_ = scan_queue.status(ticket)
+    if status_ is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "หมดเวลารอคิว")
+    return status_
+
+
+@router.delete("/queue/{ticket}", status_code=status.HTTP_204_NO_CONTENT)
+def leave_queue(ticket: str):
+    scan_queue.leave(ticket)
+
+
+def _scan_ticket(x_scan_ticket: str | None = Header(None)):
+    """The search's ticket; it leaves the line when the request ends, however it ends."""
+    try:
+        yield x_scan_ticket
+    finally:
+        scan_queue.leave(x_scan_ticket)
 
 
 @router.post("/events/{token}/search", response_model=SearchResult)
@@ -118,6 +179,7 @@ async def search(
     face_index: int = Form(0, ge=0, le=50),
     event: Event = Depends(accessible_event),
     db: Session = Depends(get_db),
+    ticket: str | None = Depends(_scan_ticket),
 ):
     rate_limit.enforce(request, "search-min", settings.rate_search_per_minute, 60)
     rate_limit.enforce(request, "search-day", settings.rate_search_per_day, 24 * 3600)
@@ -137,8 +199,10 @@ async def search(
     finally:
         del data
 
+    # Taking a turn in line earns a wait for the model; skipping the line only works when it's idle.
+    wait = settings.search_queue_timeout if await run_in_threadpool(scan_queue.may_wait, ticket) else 0
     try:
-        faces = await run_in_threadpool(lambda: face_service.detect(to_bgr_array(img), None, settings.search_queue_timeout))
+        faces = await run_in_threadpool(lambda: face_service.detect(to_bgr_array(img), None, wait, face_index))
     except FaceBusy as exc:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, "ตอนนี้มีคนค้นหาพร้อมกันเยอะมาก ลองใหม่อีกครั้งในอีกสักครู่", headers={"Retry-After": "10"}
@@ -167,6 +231,7 @@ async def search(
         ],
     )
     await run_in_threadpool(visitors.record, db, request, event_id, "scan")
+    await run_in_threadpool(scan_queue.record_duration, time.perf_counter() - started)
     return result
 
 
@@ -214,9 +279,17 @@ def download_zip(
     if not photos:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "ไม่พบรูปภาพ")
     opts = watermark_options(event)
+    if not _zip_gate.acquire(timeout=20):
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "ตอนนี้มีคนดาวน์โหลดพร้อมกันเยอะ ลองใหม่อีกครั้งในอีกสักครู่", headers={"Retry-After": "20"}
+        )
+    try:
+        stream = build_zip(photos, (lambda data: apply_watermark(data, opts)) if opts else None)
+    finally:
+        _zip_gate.release()
     visitors.record(db, request, event.id, "download", len(photos))
     return StreamingResponse(
-        build_zip(photos, (lambda data: apply_watermark(data, opts)) if opts else None),
+        stream,
         media_type="application/zip",
         headers={"Content-Disposition": 'attachment; filename="my-photos.zip"'},
     )

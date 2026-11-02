@@ -72,10 +72,16 @@ def main():
             with lock:
                 n = next(counter)
             t = time.perf_counter()
+            ip = {"X-Real-IP": f"10.9.{n // 250}.{n % 250}"}
             try:
+                # Like the web app: wait in the scan queue, then upload when it's this visitor's turn.
+                _, turn = req("POST", f"/public/events/{ev['share_token']}/queue", headers=ip)
+                while not turn["ready"]:
+                    time.sleep(1)
+                    _, turn = req("GET", f"/public/queue/{turn['ticket']}", headers=ip)
                 status, _ = req(
                     "POST", f"/public/events/{ev['share_token']}/search",
-                    headers={"X-Real-IP": f"10.9.{n // 250}.{n % 250}"},
+                    headers={**ip, "X-Scan-Ticket": turn["ticket"]},
                     files={"file": ("selfie.jpg", photo)},
                 )
             except urllib.error.HTTPError as exc:  # 503 = queue full, the app asks to retry

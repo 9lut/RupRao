@@ -15,12 +15,23 @@
 		# is the visitor (from CF-Connecting-IP) instead of a Cloudflare edge — rate limits need it.
 		trusted_proxies static {$TRUSTED_PROXIES:127.0.0.1/32}
 		client_ip_headers CF-Connecting-IP X-Forwarded-For
+		# Connections that send their headers very slowly only tie up the server.
+		timeouts {
+			read_header 15s
+			idle 2m
+		}
+		max_header_size 32KB
 	}
 }
 
 (app) {
 	encode zstd gzip
 
+	# Only signed-in organizers upload big batches; a stranger's request has no reason to be large.
+	@attendee path /api/public/* /api/auth/*
+	request_body @attendee {
+		max_size 25MB
+	}
 	request_body {
 		max_size 1100MB
 	}
@@ -28,19 +39,30 @@
 	handle_path /api/* {
 		reverse_proxy api:8000 {
 			header_up X-Real-IP {client_ip}
+			# While a container is being replaced, hold requests a moment instead of answering 502.
+			lb_try_duration 20s
+			lb_try_interval 500ms
 		}
 	}
 
 	handle_path /storage/* {
+		# Browsers only ever read photos through signed links; nothing else of MinIO is public.
+		@write not method GET HEAD
+		respond @write 405
+		respond /minio/* 404
 		reverse_proxy minio:9000
 	}
 
 	handle {
-		reverse_proxy web:3000
+		reverse_proxy web:3000 {
+			lb_try_duration 20s
+			lb_try_interval 500ms
+		}
 	}
 
 	header {
 		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "camera=(self), microphone=(), geolocation=()"
 		-Server

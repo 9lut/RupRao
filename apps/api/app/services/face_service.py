@@ -20,7 +20,7 @@ class DetectedFace:
     width: int
     height: int
     score: float
-    embedding: np.ndarray  # L2-normalized, shape (512,)
+    embedding: np.ndarray | None  # L2-normalized, shape (512,); None if not asked for (see detect)
 
     @property
     def area(self) -> int:
@@ -76,18 +76,22 @@ class FaceService:
             self._app = app
             log.info("Face model ready")
 
-    def detect(self, bgr: np.ndarray, det_size: int | None = None, wait: float | None = None) -> list[DetectedFace]:
-        """Detect faces and embed each one. Returned list is sorted by face area, largest first.
+    def detect(
+        self, bgr: np.ndarray, det_size: int | None = None, wait: float | None = None, only_face: int | None = None
+    ) -> list[DetectedFace]:
+        """Detect faces and embed them. Returned list is sorted by face area, largest first.
+        `only_face` embeds just that one (clamped to the last face): embedding is the slow step, and a
+        search needs one person, however many people are in the selfie's background.
         Waits for a free inference slot; with `wait` seconds set, raises FaceBusy when none frees up."""
         self.load()
         if not self._gate.acquire(timeout=wait):
             raise FaceBusy
         try:
-            return self._detect(bgr, det_size)
+            return self._detect(bgr, det_size, only_face)
         finally:
             self._gate.release()
 
-    def _detect(self, bgr: np.ndarray, det_size: int | None) -> list[DetectedFace]:
+    def _detect(self, bgr: np.ndarray, det_size: int | None, only_face: int | None = None) -> list[DetectedFace]:
         from insightface.app.common import Face
 
         size = det_size or settings.face_det_size
@@ -95,7 +99,7 @@ class FaceService:
         recognizer = self._app.models["recognition"]
 
         h, w = bgr.shape[:2]
-        faces: list[DetectedFace] = []
+        found: list[tuple[DetectedFace, int]] = []
         for i in range(bboxes.shape[0]):
             score = float(bboxes[i, 4])
             if score < settings.face_min_det_score or kpss is None:
@@ -104,16 +108,18 @@ class FaceService:
             x1, y1, x2, y2 = max(0, x1), max(0, y1), min(w, x2), min(h, y2)
             if min(x2 - x1, y2 - y1) < settings.face_min_size:
                 continue
-            face = Face(bbox=bboxes[i, :4], kps=kpss[i], det_score=score)
-            recognizer.get(bgr, face)  # aligns on landmarks, sets face.embedding
-            faces.append(
-                DetectedFace(
-                    x=int(x1), y=int(y1), width=int(x2 - x1), height=int(y2 - y1), score=score,
-                    embedding=face.normed_embedding.astype(np.float32),
-                )
+            found.append(
+                (DetectedFace(x=int(x1), y=int(y1), width=int(x2 - x1), height=int(y2 - y1), score=score, embedding=None), i)
             )
-        faces.sort(key=lambda f: f.area, reverse=True)
-        return faces
+        found.sort(key=lambda pair: pair[0].area, reverse=True)
+
+        wanted = range(len(found)) if only_face is None else {min(only_face, len(found) - 1)}
+        for n in wanted:
+            detected, i = found[n]
+            face = Face(bbox=bboxes[i, :4], kps=kpss[i], det_score=detected.score)
+            recognizer.get(bgr, face)  # aligns on landmarks, sets face.embedding
+            detected.embedding = face.normed_embedding.astype(np.float32)
+        return [detected for detected, _ in found]
 
 
 face_service = FaceService()

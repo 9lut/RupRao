@@ -1,5 +1,6 @@
-"""Fixed-window rate limiting in Redis, keyed by client IP."""
+"""Fixed-window rate limiting in Redis, keyed by client IP, plus failure counters against guessing."""
 
+import hashlib
 import logging
 
 from fastapi import HTTPException, Request, status
@@ -39,10 +40,53 @@ def enforce(request: Request, name: str, limit: int, window_seconds: int) -> Non
         log.exception("Rate limiter unavailable; allowing request")
         return
     if not allowed:
-        minutes = (retry_after + 59) // 60
-        wait = f"{retry_after} วินาที" if retry_after < 120 else f"{minutes} นาที"
-        raise HTTPException(
-            status.HTTP_429_TOO_MANY_REQUESTS,
-            f"ใช้งานถี่เกินไป กรุณารอ {wait} แล้วลองใหม่",
-            headers={"Retry-After": str(retry_after)},
-        )
+        raise _too_many("ใช้งานถี่เกินไป", retry_after)
+
+
+def _too_many(reason: str, retry_after: int) -> HTTPException:
+    minutes = (retry_after + 59) // 60
+    wait = f"{retry_after} วินาที" if retry_after < 120 else f"{minutes} นาที"
+    return HTTPException(
+        status.HTTP_429_TOO_MANY_REQUESTS,
+        f"{reason} กรุณารอ {wait} แล้วลองใหม่",
+        headers={"Retry-After": str(retry_after)},
+    )
+
+
+# ---------- wrong guesses (passwords, access codes, share links) ----------
+# Only failures count, so normal use never gets near these limits, and they survive restarts.
+
+def _failure_key(name: str, who: str) -> str:
+    # `who` can include what a stranger typed, so its length and characters mustn't reach Redis.
+    return f"fail:{name}:{hashlib.sha256(who.encode()).hexdigest()[:32]}"
+
+
+def refuse_after_failures(name: str, who: str, limit: int) -> None:
+    """Raise 429 when `who` has failed too often. Check BEFORE testing the guess."""
+    try:
+        key = _failure_key(name, who)
+        count = int(redis_conn.get(key) or 0)
+        retry_after = redis_conn.ttl(key) if count >= limit else 0
+    except Exception:  # noqa: BLE001 - see enforce()
+        log.exception("Rate limiter unavailable; allowing request")
+        return
+    if count >= limit:
+        raise _too_many("ลองผิดหลายครั้งเกินไป", max(int(retry_after), 1))
+
+
+def add_failure(name: str, who: str, window_seconds: int) -> None:
+    try:
+        key = _failure_key(name, who)
+        pipe = redis_conn.pipeline()
+        pipe.incr(key)
+        pipe.expire(key, window_seconds, nx=True)
+        pipe.execute()
+    except Exception:  # noqa: BLE001
+        log.exception("Rate limiter unavailable")
+
+
+def clear_failures(name: str, who: str) -> None:
+    try:
+        redis_conn.delete(_failure_key(name, who))
+    except Exception:  # noqa: BLE001
+        log.exception("Rate limiter unavailable")

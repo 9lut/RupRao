@@ -1,6 +1,7 @@
 """S3-compatible object storage. Works with MinIO locally and Cloudflare R2 / AWS S3 in production."""
 
 import logging
+import time
 from contextvars import ContextVar
 from functools import lru_cache
 from urllib.parse import urlsplit, urlunsplit
@@ -35,6 +36,19 @@ def with_path_prefix(url: str, prefix: str) -> str:
         return url
     u = urlsplit(url)
     return urlunsplit((u.scheme, u.netloc, prefix.rstrip("/") + u.path, u.query, u.fragment))
+
+
+@lru_cache(maxsize=20_000)
+def _signed_url(base: str, bucket: str, key: str, download_name: str | None, _window: int) -> str:
+    """Signing costs about 5 ms of CPU, so an album page of 120 links used to cost half a second per
+    visitor. Reusing links also keeps them identical, which lets browsers cache the images."""
+    parsed = urlsplit(base)
+    endpoint = f"{parsed.scheme}://{parsed.netloc}"
+    params = {"Bucket": bucket, "Key": key, "ResponseCacheControl": "private, max-age=1800"}
+    if download_name:
+        params["ResponseContentDisposition"] = f'attachment; filename="{download_name}"'
+    url = _client(endpoint).generate_presigned_url("get_object", Params=params, ExpiresIn=settings.presigned_url_ttl)
+    return with_path_prefix(url, parsed.path)
 
 
 class StorageService:
@@ -83,15 +97,9 @@ class StorageService:
 
     def get_url(self, key: str, download_name: str | None = None) -> str:
         base = settings.s3_public_url or public_base_var.get() or settings.s3_direct_public_url
-        parsed = urlsplit(base)
-        endpoint = f"{parsed.scheme}://{parsed.netloc}"
-        params = {"Bucket": self.bucket, "Key": key}
-        if download_name:
-            params["ResponseContentDisposition"] = f'attachment; filename="{download_name}"'
-        url = _client(endpoint).generate_presigned_url(
-            "get_object", Params=params, ExpiresIn=settings.presigned_url_ttl
-        )
-        return with_path_prefix(url, parsed.path)
+        # Half a TTL per window, so a reused link always has at least half its life left.
+        window = int(time.time() // max(settings.presigned_url_ttl // 2, 1))
+        return _signed_url(base, self.bucket, key, download_name, window)
 
 
 storage = StorageService()

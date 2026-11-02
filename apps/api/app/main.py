@@ -45,6 +45,9 @@ app = FastAPI(
     contact={"name": "Lutfee"},
     lifespan=lifespan,
     root_path=settings.api_root_path,
+    docs_url="/docs" if settings.api_docs else None,
+    redoc_url="/redoc" if settings.api_docs else None,
+    openapi_url="/openapi.json" if settings.api_docs else None,
 )
 
 # Only needed when the web app calls the API cross-origin (e.g. local dev without Caddy).

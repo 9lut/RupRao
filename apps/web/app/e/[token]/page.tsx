@@ -19,7 +19,7 @@ import {
 import { ScanCorners, ScanningMark } from "@/components/brand";
 import { useDocumentBrand, useProvideEventBrand } from "@/lib/eventBrand";
 import { asTheme, navOverlay, type ThemeCustom } from "@/lib/themes";
-import { ApiError, publicApi, type FaceBox, type Photo, type PublicEvent, type SearchResult } from "@/lib/api";
+import { ApiError, publicApi, shrinkSelfie, waitForScanTurn, type FaceBox, type Photo, type PublicEvent, type QueueStatus, type SearchResult } from "@/lib/api";
 
 const CONSENT_KEY = "ruprao_consent_v1";
 const NO_CUSTOM: ThemeCustom = {};
@@ -96,6 +96,8 @@ export default function EventPage({ params }: { params: Promise<{ token: string 
   const [result, setResult] = useState<SearchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [queue, setQueue] = useState<QueueStatus | null>(null);
+  const searchRun = useRef(0);
 
   const favorites = useFavorites(token);
   const theme = asTheme(event?.theme);
@@ -129,18 +131,29 @@ export default function EventPage({ params }: { params: Promise<{ token: string 
   }, [token]);
 
   const runSearch = async (f: File, index: number) => {
+    const run = ++searchRun.current; // a newer search or "ยกเลิก" makes this one stale
+    const stale = () => run !== searchRun.current;
     setTab("search");
     setLoading(true);
     setError(null);
+    setQueue(null);
     try {
-      const r = await publicApi.search(token, code, f, index);
+      const ticket = await waitForScanTurn(token, code, setQueue, stale);
+      if (stale()) return;
+      setQueue(null);
+      const r = await publicApi.search(token, code, await shrinkSelfie(f), index, ticket);
+      if (stale()) return;
       setResult(r);
       setFaceIndex(r.face_index);
     } catch (e) {
+      if (stale()) return;
       setResult(null);
       setError(e instanceof Error ? e.message : "ค้นหาไม่สำเร็จ");
     } finally {
-      setLoading(false);
+      if (!stale()) {
+        setQueue(null);
+        setLoading(false);
+      }
     }
   };
 
@@ -159,9 +172,12 @@ export default function EventPage({ params }: { params: Promise<{ token: string 
   const start = (how: "camera" | "file" | File) => (consented ? proceed(how) : setConsentFor(how));
 
   const reset = () => {
+    searchRun.current++;
     setFile(null);
     setResult(null);
     setError(null);
+    setQueue(null);
+    setLoading(false);
   };
 
   if (loadError) {
@@ -242,6 +258,7 @@ export default function EventPage({ params }: { params: Promise<{ token: string 
                 file={file}
                 result={result}
                 loading={loading}
+                queue={queue}
                 error={error}
                 faceIndex={faceIndex}
                 onFaceIndex={(i) => file && runSearch(file, i)}
@@ -812,8 +829,13 @@ function SelfieAvatar({ file, face, size }: { file: File; face?: FaceBox; size?:
   );
 }
 
-/** The submitted photo with scan corners and a sweeping line while the API searches. */
-function ScanningSelfie({ file }: { file: File }) {
+function fmtWait(seconds: number) {
+  if (seconds < 60) return `${Math.max(5, Math.ceil(seconds / 5) * 5)} วินาที`;
+  return `${Math.ceil(seconds / 60)} นาที`;
+}
+
+/** The submitted photo with scan corners and a sweeping line while the API searches or waits in line. */
+function ScanningSelfie({ file, queue, onCancel }: { file: File; queue: QueueStatus | null; onCancel: () => void }) {
   const [src, setSrc] = useState<string | null>(null);
   useEffect(() => {
     const url = URL.createObjectURL(file);
@@ -827,10 +849,24 @@ function ScanningSelfie({ file }: { file: File }) {
         {src && <img src={src} alt="" className="h-full w-full object-cover" />}
         <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/20" />
         <ScanCorners className="absolute inset-3 h-[calc(100%-1.5rem)] w-[calc(100%-1.5rem)]" />
-        <span className="scan-line on-photo" aria-hidden />
+        {!queue && <span className="scan-line on-photo" aria-hidden />}
       </div>
-      <p className="mt-6 text-[15px] font-medium">กำลังสแกนใบหน้า…</p>
-      <p className="mt-1 text-xs text-muted">เทียบกับทุกรูปในงานนี้ ใช้เวลาไม่กี่วินาที</p>
+      {queue ? (
+        <>
+          <p className="mt-6 text-xs text-muted">มีคนสแกนอยู่หลายคน คุณอยู่คิวที่</p>
+          <p className="mt-1 text-4xl font-semibold tabular-nums tracking-tight">{queue.position.toLocaleString()}</p>
+          <p className="mt-2 text-sm text-muted">รอประมาณ {fmtWait(queue.eta_seconds)} · เปิดหน้านี้ค้างไว้ ถึงคิวแล้วจะเริ่มเอง</p>
+          <p className="mt-1 text-xs text-muted">รูปของคุณยังอยู่ในเครื่องนี้ ระหว่างรอดูแท็บอื่นได้</p>
+        </>
+      ) : (
+        <>
+          <p className="mt-6 text-[15px] font-medium">กำลังสแกนใบหน้า…</p>
+          <p className="mt-1 text-xs text-muted">เทียบกับทุกรูปในงานนี้</p>
+        </>
+      )}
+      <button onClick={onCancel} className="mt-4 rounded-full px-4 py-2 text-xs text-muted transition hover:bg-soft hover:text-ink">
+        ยกเลิก
+      </button>
     </div>
   );
 }
@@ -840,6 +876,7 @@ function ResultsView({
   file,
   result,
   loading,
+  queue,
   error,
   faceIndex,
   onFaceIndex,
@@ -851,6 +888,7 @@ function ResultsView({
   file: File | null;
   result: SearchResult | null;
   loading: boolean;
+  queue: QueueStatus | null;
   error: string | null;
   faceIndex: number;
   onFaceIndex: (i: number) => void;
@@ -881,7 +919,7 @@ function ResultsView({
 
   return (
     <section className="mt-6 lg:mt-8">
-      {loading && file && <ScanningSelfie file={file} />}
+      {loading && file && <ScanningSelfie file={file} queue={queue} onCancel={onReset} />}
 
       {/* query summary */}
       {!loading && (

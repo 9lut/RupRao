@@ -16,6 +16,10 @@ git pull --ff-only
 after=$(git rev-parse --short HEAD)
 echo "code: $before -> $after"
 docker compose -f docker-compose.yml -f docker-compose.gcp.yml up -d --build --remove-orphans
+# Caddy reads its config once at start, and compose cannot see a change inside a mounted file.
+if git diff --name-only "$before" "$after" | grep -q "^infra/caddy/"; then
+  docker compose -f docker-compose.yml -f docker-compose.gcp.yml restart caddy
+fi
 docker image prune -f >/dev/null
 docker compose -f docker-compose.yml -f docker-compose.gcp.yml ps --format "table {{.Service}}\t{{.Status}}"'
 
