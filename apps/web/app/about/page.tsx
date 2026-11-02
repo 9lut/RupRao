@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import BackButton from "@/components/BackButton";
-import { BRAND_ASSETS, CREDIT, RupRaoMark } from "@/components/brand";
+import { BRAND_ASSETS, deploymentCredit, RupRaoMark } from "@/components/brand";
 
 export const metadata: Metadata = { title: "เกี่ยวกับเรา · รูปเรา (RupRao)" };
+// The credit comes from the server's environment, so render per request rather than at build.
+export const dynamic = "force-dynamic";
 
 const STEPS = [
   { n: "1", title: "ผู้จัดงานอัปโหลดรูป", body: "AI สแกนใบหน้าในทุกรูปอัตโนมัติ ไม่ต้องแท็กชื่อทีละคน" },
@@ -19,6 +21,7 @@ const PROMISES = [
 ];
 
 export default function AboutPage() {
+  const credit = deploymentCredit();
   return (
     <div className="mx-auto max-w-3xl px-4 pb-24 pt-6 sm:px-6">
       <BackButton />
@@ -75,12 +78,17 @@ export default function AboutPage() {
         <p className="text-xs uppercase tracking-[0.2em] text-muted">Made by</p>
         <h2 className="mt-2 text-xl font-semibold">ผู้พัฒนา</h2>
         <div className="mt-6 flex flex-col items-center gap-5 rounded-[32px] border border-line bg-gradient-to-b from-white to-soft p-8 text-center sm:flex-row sm:text-left">
-          <div className="grid h-20 w-20 shrink-0 place-items-center rounded-full bg-white ring-1 ring-line">
-            <RupRaoMark size={60} />
-          </div>
+          {credit.photo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={credit.photo} alt={credit.name} className="h-24 w-24 shrink-0 rounded-full object-cover ring-4 ring-white shadow-md" />
+          ) : (
+            <div className="grid h-20 w-20 shrink-0 place-items-center rounded-full bg-white ring-1 ring-line">
+              <RupRaoMark size={60} />
+            </div>
+          )}
           <div>
             <p className="text-sm text-muted">พัฒนาโดย</p>
-            <p className="mt-0.5 text-2xl font-semibold tracking-tight">{CREDIT.name}</p>
+            <p className="mt-0.5 text-2xl font-semibold tracking-tight">{credit.name}</p>
             <p className="mt-2 text-sm leading-relaxed text-muted">
               ออกแบบและพัฒนา รูปเรา (RupRao) ตั้งแต่ระบบ AI จดจำใบหน้า หลังบ้าน ไปจนถึงหน้าตาที่คุณใช้อยู่ —
               เพื่อให้ทุกงานแจกรูปได้ง่าย และทุกคนได้รูปของตัวเองอย่างปลอดภัย

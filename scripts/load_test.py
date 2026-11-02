@@ -12,6 +12,7 @@ import os
 import statistics
 import threading
 import time
+import urllib.error
 import urllib.request
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -71,11 +72,14 @@ def main():
             with lock:
                 n = next(counter)
             t = time.perf_counter()
-            status, _ = req(
-                "POST", f"/public/events/{ev['share_token']}/search",
-                headers={"X-Real-IP": f"10.9.{n // 250}.{n % 250}"},
-                files={"file": ("selfie.jpg", photo)},
-            )
+            try:
+                status, _ = req(
+                    "POST", f"/public/events/{ev['share_token']}/search",
+                    headers={"X-Real-IP": f"10.9.{n // 250}.{n % 250}"},
+                    files={"file": ("selfie.jpg", photo)},
+                )
+            except urllib.error.HTTPError as exc:  # 503 = queue full, the app asks to retry
+                status = exc.code
             return time.perf_counter() - t, status
 
         search()  # warm-up
@@ -87,10 +91,12 @@ def main():
             wall = time.perf_counter() - t0
             lat = sorted(r[0] for r in results)
             ok = sum(1 for r in results if r[1] == 200)
+            busy = sum(1 for r in results if r[1] == 503)
             p95 = lat[int(len(lat) * 0.95) - 1]
             print(
-                f"concurrency {conc:>2}: {ok}/{total} ok · {total / wall:4.1f} searches/s · "
-                f"median {statistics.median(lat):5.2f}s · p95 {p95:5.2f}s"
+                f"concurrency {conc:>2}: {ok}/{total} ok, {busy} busy · {ok / wall:4.1f} searches/s · "
+                f"median {statistics.median(lat):5.2f}s · p95 {p95:5.2f}s",
+                flush=True,
             )
     finally:
         req("DELETE", f"/admin/events/{ev['id']}", headers=auth)
