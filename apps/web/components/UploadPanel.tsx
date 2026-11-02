@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { adminApi, uploadPhotos } from "@/lib/api";
+import { IMAGE_ACCEPT, isImageFile } from "@/lib/imageFiles";
 import { analyze, cull, ISSUE_LABEL, phashOf, unchecked, type Verdict } from "@/lib/photoCheck";
 
 // Each request stays small: ≤ 10 files and ≤ 80 MB (Cloudflare's free plan rejects bodies > 100 MB).
@@ -50,7 +51,7 @@ export default function UploadPanel({ eventId, onUploaded }: { eventId: string; 
   const busy = stage.kind === "checking" || stage.kind === "uploading";
 
   const pick = async (list: FileList | File[] | null) => {
-    const files = Array.from(list ?? []).filter((f) => f.type.startsWith("image/"));
+    const files = Array.from(list ?? []).filter(isImageFile);
     if (!files.length || busy) return;
     if (!check) return upload(files.map((file) => ({ file, phash: null })), 0);
 
@@ -144,7 +145,7 @@ export default function UploadPanel({ eventId, onUploaded }: { eventId: string; 
             ref={inputRef}
             type="file"
             multiple
-            accept="image/jpeg,image/png,image/webp"
+            accept={IMAGE_ACCEPT}
             className="hidden"
             onChange={(e) => {
               pick(e.target.files);
@@ -183,7 +184,7 @@ export default function UploadPanel({ eventId, onUploaded }: { eventId: string; 
                 </svg>
               </div>
               <p className="mt-3 text-[15px] font-medium">ลากรูปมาวาง หรือคลิกเพื่อเลือกหลายรูป</p>
-              <p className="mt-1 text-xs text-muted">JPEG, PNG, WebP · สูงสุด 20 MB ต่อรูป</p>
+              <p className="mt-1 text-xs text-muted">JPEG, PNG, WebP, HEIC · สูงสุด 20 MB ต่อรูป</p>
             </>
           )}
         </div>

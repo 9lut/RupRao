@@ -18,6 +18,7 @@ import {
 } from "@/components/icons";
 import { ScanCorners, ScanningMark } from "@/components/brand";
 import { useDocumentBrand, useProvideEventBrand } from "@/lib/eventBrand";
+import { IMAGE_ACCEPT, isImageFile } from "@/lib/imageFiles";
 import { asTheme, navOverlay, type ThemeCustom } from "@/lib/themes";
 import { ApiError, publicApi, shrinkSelfie, waitForScanTurn, type FaceBox, type Photo, type PublicEvent, type QueueStatus, type SearchResult } from "@/lib/api";
 
@@ -286,7 +287,7 @@ export default function EventPage({ params }: { params: Promise<{ token: string 
       <input
         ref={fileRef}
         type="file"
-        accept="image/jpeg,image/png,image/webp"
+        accept={IMAGE_ACCEPT}
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
@@ -465,7 +466,7 @@ function DesktopWelcome({
           e.preventDefault();
           setDragging(false);
           const f = e.dataTransfer.files?.[0];
-          if (f?.type.startsWith("image/")) onDrop(f);
+          if (f && isImageFile(f)) onDrop(f);
         }}
         className={`fade-in flex min-h-[460px] flex-col items-center justify-center rounded-[36px] border-2 border-dashed px-10 text-center transition ${
           dragging ? "border-accent bg-accent/5" : "border-line bg-gradient-to-b from-white to-soft/70"
@@ -645,7 +646,7 @@ function PhotoBrowser({
       {heart(it)}
       <button
         onClick={() => askRemoval([it.photo.id])}
-        className="whitespace-nowrap rounded-full border border-line px-4 py-2.5 text-xs text-muted transition hover:border-red-200 hover:text-red-600"
+        className="h-10 whitespace-nowrap rounded-full border border-line px-3 text-xs text-muted transition hover:border-red-200 hover:text-red-600 sm:px-4"
       >
         ขอลบรูปนี้
       </button>
@@ -656,7 +657,7 @@ function PhotoBrowser({
     <button
       onClick={() => ctx.favorites.toggle(it.photo.id)}
       aria-label="ถูกใจ"
-      className={`grid h-10 w-10 place-items-center rounded-full border border-line transition hover:bg-soft ${
+      className={`grid h-10 w-10 shrink-0 place-items-center rounded-full border border-line transition hover:bg-soft ${
         ctx.favorites.has(it.photo.id) ? "text-rose-500" : "text-muted"
       }`}
     >

@@ -4,12 +4,16 @@ import io
 from dataclasses import dataclass
 
 import numpy as np
-from PIL import Image, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageCms, ImageOps, UnidentifiedImageError
+from pillow_heif import register_heif_opener
 
 from app.config import settings
 
-ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP"}
+register_heif_opener()  # what iPhones and many Android phones shoot by default
+
+ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP", "HEIF"}
 Image.MAX_IMAGE_PIXELS = settings.max_image_pixels
+_SRGB = ImageCms.createProfile("sRGB")
 
 
 class ImageValidationError(ValueError):
@@ -33,22 +37,40 @@ def load_image(data: bytes, keep_alpha: bool = False) -> Image.Image:
     try:
         img = Image.open(io.BytesIO(data))
         if img.format not in ALLOWED_FORMATS:
-            raise ImageValidationError("รองรับเฉพาะ JPEG, PNG, WebP")
+            raise ImageValidationError("รองรับเฉพาะ JPEG, PNG, WebP, HEIC")
         if img.width * img.height > settings.max_image_pixels:
             raise ImageValidationError("ความละเอียดภาพสูงเกินไป")
+        source_format = img.format
         img.load()
-    except (UnidentifiedImageError, Image.DecompressionBombError, OSError) as exc:
+    except (UnidentifiedImageError, Image.DecompressionBombError, OSError, ValueError) as exc:
         raise ImageValidationError("ไฟล์ไม่ใช่รูปภาพที่ถูกต้อง") from exc
-    img = ImageOps.exif_transpose(img)
-    return img.convert("RGBA" if keep_alpha else "RGB")
+    img = ImageOps.exif_transpose(img).convert("RGBA" if keep_alpha else "RGB")
+    img.info["source_format"] = source_format
+    return img
+
+
+def _to_srgb(img: Image.Image) -> Image.Image:
+    """Phones shoot in wider colour (Display P3). Saving those numbers without their profile, which
+    re-encoding drops, makes photos look washed out, so convert the colours to standard sRGB."""
+    icc = img.info.get("icc_profile")
+    if not icc:
+        return img
+    try:
+        return ImageCms.profileToProfile(img, ImageCms.ImageCmsProfile(io.BytesIO(icc)), _SRGB, outputMode="RGB")
+    except (ImageCms.PyCMSError, OSError):
+        return img  # a damaged profile shouldn't cost anyone their photo
 
 
 def process_upload(data: bytes) -> ProcessedImage:
     img = load_image(data)
+    # A HEIC has never been a JPEG, so this is its one conversion: keep it sharp, with full-resolution
+    # colour. JPEGs are already compressed, and more quality couldn't bring back what they lost.
+    jpeg = {"quality": 95, "subsampling": 0} if img.info["source_format"] == "HEIF" else {"quality": 92}
+    img = _to_srgb(img)
 
     original = io.BytesIO()
     # Re-encoding strips metadata (GPS etc.) and any embedded payloads.
-    img.save(original, "JPEG", quality=92, optimize=True)
+    img.save(original, "JPEG", optimize=True, **jpeg)
 
     thumb = img.copy()
     thumb.thumbnail((settings.thumbnail_size, settings.thumbnail_size * 2), Image.Resampling.LANCZOS)

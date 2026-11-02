@@ -164,11 +164,12 @@ export default function Lightbox<T extends GalleryItem>({
         <NavButton side="right" disabled={index === items.length - 1} onClick={() => go(1)} />
       </div>
 
-      <div className="pb-safe flex shrink-0 items-center justify-center gap-2 px-4 pt-1">
+      {/* Phones: the small actions on one row, wrapping if they must, with download full width below. */}
+      <div className="pb-safe flex shrink-0 flex-wrap items-center justify-center gap-2 px-4 pt-2">
         {face && (
           <button
             onClick={() => setShowFace((s) => !s)}
-            className={`whitespace-nowrap rounded-full px-4 py-2.5 text-xs transition ${showFace ? "bg-soft text-ink" : "border border-line text-muted hover:text-ink"}`}
+            className={`h-10 whitespace-nowrap rounded-full px-3 text-xs transition sm:px-4 ${showFace ? "bg-soft text-ink" : "border border-line text-muted hover:text-ink"}`}
           >
             กรอบใบหน้า
           </button>
@@ -177,7 +178,7 @@ export default function Lightbox<T extends GalleryItem>({
         {onNotMe && (
           <button
             onClick={() => onNotMe(item)}
-            className="whitespace-nowrap rounded-full border border-line px-4 py-2.5 text-xs text-muted transition hover:text-ink"
+            className="h-10 whitespace-nowrap rounded-full border border-line px-3 text-xs text-muted transition hover:text-ink sm:px-4"
           >
             ไม่ใช่ฉัน
           </button>
@@ -185,7 +186,7 @@ export default function Lightbox<T extends GalleryItem>({
         <button
           onClick={download}
           disabled={downloading}
-          className="whitespace-nowrap rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white transition hover:bg-ink/85 disabled:opacity-50"
+          className="h-11 w-full whitespace-nowrap rounded-full bg-ink px-5 text-sm font-medium text-white transition hover:bg-ink/85 disabled:opacity-50 sm:h-10 sm:w-auto"
         >
           {downloading ? "กำลังเตรียม…" : "ดาวน์โหลด"}
         </button>
