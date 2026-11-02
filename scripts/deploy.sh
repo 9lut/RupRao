@@ -3,7 +3,7 @@
 # Run on your own computer AFTER pushing your commits:
 #
 #   git push
-#   bash scripts/deploy.sh                                  # via gcloud (VM "ruprao", asia-southeast1-b)
+#   bash scripts/deploy.sh                                  # via gcloud + IAP (VM "ruprao", asia-southeast1-b)
 #   bash scripts/deploy.sh you@34.87.12.34 -i ~/.ssh/ruprao # or plain ssh
 #
 # Data (database, photos) is untouched; database migrations run when the api restarts.
@@ -24,5 +24,6 @@ if [ $# -gt 0 ]; then
   shift
   ssh "$@" "$HOST" "$REMOTE_CMD"  # options must come before the host
 else
-  gcloud compute ssh "${VM:-ruprao}" --zone "${ZONE:-asia-southeast1-b}" --command "$REMOTE_CMD"
+  # Port 22 only accepts Google's IAP range (docs/deploy-gcp.md §6), so tunnel through IAP.
+  gcloud compute ssh "${VM:-ruprao}" --zone "${ZONE:-asia-southeast1-b}" --tunnel-through-iap --command "$REMOTE_CMD"
 fi

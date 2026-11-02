@@ -145,7 +145,7 @@ Compute Engine → VM instances → กดปุ่ม **SSH** ท้ายแ�
 
 **วิธีที่ 2: `gcloud compute ssh` (แนะนำ)**
 ```bash
-gcloud compute ssh ruprao
+gcloud compute ssh ruprao                          # ถ้าปิดพอร์ต 22 ตามวิธีที่ 4 แล้ว ให้เติม --tunnel-through-iap
 ```
 ครั้งแรกจะสร้างคีย์และเพิ่มเข้าเครื่องให้อัตโนมัติ ส่งไฟล์ด้วย `gcloud compute scp ไฟล์ ruprao:~/`
 
@@ -308,7 +308,7 @@ nano gf7.caddy                                            # แก้ชื่�
 cd ~/RupRao && docker compose restart caddy
 ```
 
-> หน้า MinIO console (`minio-console.caddy.example`) ใช้รหัส root ของ MinIO เข้าระบบ เปิดเฉพาะเมื่อตั้งรหัสแข็งแรงแล้ว หรือใช้ผ่าน SSH tunnel แทน: `gcloud compute ssh ruprao -- -L 9001:localhost:9001` แล้วเปิด <http://localhost:9001>
+> หน้า MinIO console (`minio-console.caddy.example`) ใช้รหัส root ของ MinIO เข้าระบบ เปิดเฉพาะเมื่อตั้งรหัสแข็งแรงแล้ว หรือใช้ผ่าน SSH tunnel แทน: `gcloud compute ssh ruprao --tunnel-through-iap -- -L 9001:localhost:9001` แล้วเปิด <http://localhost:9001>
 
 ### 8.5 ยังไม่มีโดเมน
 
@@ -452,7 +452,7 @@ bash scripts/push-to-server.sh you@34.87.12.34 -i ~/.ssh/ruprao
 ```bash
 bash scripts/backup.sh                                              # ในเครื่องตัวเอง → backups/<เวลา>/
 gcloud compute scp --recurse backups/<เวลา> ruprao:~/RupRao/backups/
-gcloud compute ssh ruprao --command "cd ~/RupRao && RESTORE_CONFIRM=restore bash scripts/restore.sh backups/<เวลา>"
+gcloud compute ssh ruprao --tunnel-through-iap --command "cd ~/RupRao && RESTORE_CONFIRM=restore bash scripts/restore.sh backups/<เวลา>"
 ```
 
 ---
@@ -504,8 +504,8 @@ bash scripts/deploy.sh you@34.87.12.34 -i ~/.ssh/ruprao  # หรือ ssh ป�
 
 ถ้าอัปเดตแล้วพัง ย้อนกลับได้โดยไม่ต้องแก้โค้ด:
 ```bash
-gcloud compute ssh ruprao --command "cd ~/RupRao && git log --oneline -5"          # ดูเวอร์ชันก่อนหน้า
-gcloud compute ssh ruprao --command "cd ~/RupRao && git checkout <commit> && docker compose -f docker-compose.yml -f docker-compose.gcp.yml up -d --build"
+gcloud compute ssh ruprao --tunnel-through-iap --command "cd ~/RupRao && git log --oneline -5"          # ดูเวอร์ชันก่อนหน้า
+gcloud compute ssh ruprao --tunnel-through-iap --command "cd ~/RupRao && git checkout <commit> && docker compose -f docker-compose.yml -f docker-compose.gcp.yml up -d --build"
 ```
 (กลับมาใช้เวอร์ชันล่าสุดด้วย `git checkout main` แล้ว deploy อีกครั้ง)
 
