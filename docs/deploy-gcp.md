@@ -110,8 +110,9 @@ gcloud compute addresses describe ruprao-ip --region=asia-southeast1 --format='v
 
 ```bash
 # 5.1 ดิสก์ข้อมูล (ชื่อต้องเป็น ruprao-data สคริปต์ติดตั้งจะหาจากชื่อนี้)
+#     ประหยัดสุด: pd-standard (~$5/100 GB) · เร็วกว่า: pd-balanced (~$11/100 GB)
 gcloud compute disks create ruprao-data \
-  --size=100GB --type=pd-balanced --zone=asia-southeast1-b
+  --size=100GB --type=pd-standard --zone=asia-southeast1-b
 
 # 5.2 VM (เปลี่ยน e2-medium เป็น e2-standard-2 ถ้าใช้สเปคแนะนำ)
 gcloud compute instances create ruprao \
@@ -354,6 +355,14 @@ RETENTION_DAYS_DEFAULT=90
 
 ## 10. Docker Compose ทั้งชุด
 
+> **ทำไมใช้ Caddy ไม่ใช้ Nginx?**
+> - **HTTPS อัตโนมัติ**: Caddy ขอและต่ออายุใบรับรอง Let's Encrypt เอง ส่วน Nginx ต้องติดตั้ง certbot และตั้ง cron ต่ออายุเพิ่ม
+> - **ใบรับรองในเครื่อง** (`tls internal`) ทำให้ทดสอบกล้องผ่าน HTTPS บนมือถือในวง Wi-Fi ได้ ซึ่ง Nginx ทำเองไม่ได้
+> - **ตั้งค่าสั้น อ่านง่าย**: [infra/caddy/Caddyfile](../infra/caddy/Caddyfile) ทั้งไฟล์ไม่ถึง 70 บรรทัด และอ่านค่าจาก `.env` ได้ตรง ๆ
+> - ได้ HTTP/2, HTTP/3 และค่าความปลอดภัยที่ดีเป็นค่าเริ่มต้น
+>
+> Nginx เร็วกว่าเล็กน้อยเมื่อโหลดสูงมาก ๆ และคนคุ้นเคยมากกว่า แต่ระบบนี้คอขวดอยู่ที่ AI สแกนใบหน้า ไม่ใช่ตัว proxy ถ้าอยากเปลี่ยนเป็น Nginx ทีหลังก็ทำได้ ต้องเขียนเส้นทาง `/api` → api, `/storage` → minio, `/` → web และตั้ง certbot เอง
+
 บนเครื่องจริงจะใช้ 2 ไฟล์ซ้อนกันเสมอ:
 
 ```bash
@@ -426,17 +435,24 @@ dc logs -f api caddy      # รอจนเห็น "Face model ready" แล�
 
 ---
 
-## 12. ย้ายข้อมูลจากเครื่องตัวเอง
+## 12. ย้ายข้อมูลจากเครื่องตัวเอง (ไม่บังคับ)
 
-ในเครื่องตัวเอง (Git Bash):
+ถ้าจะเริ่มเซิร์ฟเวอร์จากข้อมูลว่าง ข้ามข้อนี้ได้เลย ถ้าอยากยกข้อมูลในเครื่องตัวเองขึ้นไปทั้งหมด (อีเวนต์ บัญชีผู้จัดงาน ข้อมูลใบหน้า รูป และโมเดล) ทำได้ผ่าน SSH ด้วยคำสั่งเดียว
+
+ในเครื่องตัวเอง เปิด Git Bash ที่โฟลเดอร์โปรเจกต์ แล้วรัน:
+
 ```bash
-bash scripts/backup.sh                                            # ได้ backups/<เวลา>/
-gcloud compute scp --recurse backups/<เวลา> ruprao:~/RupRao/backups/
+bash scripts/push-to-server.sh you@34.87.12.34 -i ~/.ssh/ruprao
 ```
 
-บน VM:
+สคริปต์ [scripts/push-to-server.sh](../scripts/push-to-server.sh) จะสำรองข้อมูลในเครื่อง ส่งไปที่ `~/RupRao/backups/` ส่งโมเดล (ถ้าเซิร์ฟเวอร์ยังไม่มี) แล้วกู้ข้อมูลบนเซิร์ฟเวอร์ ซึ่งจะ**แทนที่**ข้อมูลเดิมบนเซิร์ฟเวอร์ ใส่ `IMAGES=1` ข้างหน้า เพื่อส่ง Docker image ที่ build แล้วไปด้วย
+
+ถ้าอยากทำเองทีละขั้น:
+
 ```bash
-cd ~/RupRao && bash scripts/restore.sh backups/<เวลา>             # พิมพ์ restore เพื่อยืนยัน
+bash scripts/backup.sh                                              # ในเครื่องตัวเอง → backups/<เวลา>/
+gcloud compute scp --recurse backups/<เวลา> ruprao:~/RupRao/backups/
+gcloud compute ssh ruprao --command "cd ~/RupRao && RESTORE_CONFIRM=restore bash scripts/restore.sh backups/<เวลา>"
 ```
 
 ---
@@ -467,10 +483,31 @@ gcloud storage buckets create gs://ruprao-backups-<ชื่อไม่ซ้�
 
 ## 14. อัปเดต ขยายเครื่อง ประหยัดเครดิต
 
-**อัปเดตโค้ด** (migration ฐานข้อมูลรันเองตอน api เริ่ม):
+**อัปเดตโค้ด**
+
+โค้ดไหลทางเดียว: **เครื่องคุณ → GitHub → เซิร์ฟเวอร์** เซิร์ฟเวอร์ดึงจาก GitHub เสมอ จึงต้อง push ขึ้น GitHub ก่อน
+
 ```bash
-cd ~/RupRao && git pull && dc up -d --build
+# 1) ในเครื่องตัวเอง: commit แล้ว push
+git add -A && git commit -m "อธิบายสิ่งที่แก้" && git push
+
+# 2) สั่งเซิร์ฟเวอร์ดึงโค้ดใหม่และ build เฉพาะส่วนที่เปลี่ยน (คำสั่งเดียว)
+bash scripts/deploy.sh                                   # ผ่าน gcloud
+bash scripts/deploy.sh you@34.87.12.34 -i ~/.ssh/ruprao  # หรือ ssh ปกติ
 ```
+
+[scripts/deploy.sh](../scripts/deploy.sh) จะ `git pull` แล้ว `up -d --build` บนเซิร์ฟเวอร์
+- ข้อมูลไม่หาย และ migration ฐานข้อมูลรันเองตอน api เริ่ม
+- ระหว่าง build เว็บยังเปิดได้ จะสะดุดแค่ไม่กี่วินาทีตอนสลับ container
+- ถ้าแก้แค่หน้าเว็บ จะ build ใหม่แค่ web ใช้ประมาณ 1–2 นาที
+- ถ้าแก้ `requirements.txt` ฝั่ง api จะนานขึ้น
+
+ถ้าอัปเดตแล้วพัง ย้อนกลับได้โดยไม่ต้องแก้โค้ด:
+```bash
+gcloud compute ssh ruprao --command "cd ~/RupRao && git log --oneline -5"          # ดูเวอร์ชันก่อนหน้า
+gcloud compute ssh ruprao --command "cd ~/RupRao && git checkout <commit> && docker compose -f docker-compose.yml -f docker-compose.gcp.yml up -d --build"
+```
+(กลับมาใช้เวอร์ชันล่าสุดด้วย `git checkout main` แล้ว deploy อีกครั้ง)
 
 **ขยายดิสก์ข้อมูล** (ไม่ต้องปิดเครื่อง):
 ```bash

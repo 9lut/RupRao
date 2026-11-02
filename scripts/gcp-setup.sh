@@ -67,12 +67,36 @@ else
   git -C "$DIR" pull --ff-only
 fi
 [ "$DIR" = "$HOME/RupRao" ] || ln -sfn "$DIR" "$HOME/RupRao"
-[ -f "$DIR/.env" ] || cp "$DIR/.env.example" "$DIR/.env"
 
 IP=$(curl -fsS -H 'Metadata-Flavor: Google' \
   http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip 2>/dev/null || true)
+
+echo "→ .env"
+if [ ! -f "$DIR/.env" ]; then
+  # Fresh server: every secret is random and never leaves this machine. Read the admin password
+  # with:  grep ADMIN_PASSWORD ~/RupRao/.env
+  # SITE / EMAIL can be passed in:  SITE=photos.example.com EMAIL=you@example.com bash gcp-setup.sh
+  SITE=${SITE:-${IP:+${IP//./-}.sslip.io}}
+  rnd() { openssl rand -hex "$1"; }
+  PG=$(rnd 16)
+  MINIO=$(rnd 16)
+  sed -e "s|^SITE_ADDRESS=.*|SITE_ADDRESS=${SITE:-localhost}|" \
+      -e "s|^CADDY_TLS=.*|CADDY_TLS=${EMAIL:-internal}|" \
+      -e "s|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=$(rnd 12)|" \
+      -e "s|^AUTH_SECRET=.*|AUTH_SECRET=$(rnd 32)|" \
+      -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$PG|" \
+      -e "s|^DATABASE_URL=.*|DATABASE_URL=postgresql+psycopg://photo_user:$PG@postgres:5432/photo_db|" \
+      -e "s|^MINIO_ROOT_PASSWORD=.*|MINIO_ROOT_PASSWORD=$MINIO|" \
+      -e "s|^S3_SECRET_KEY=.*|S3_SECRET_KEY=$MINIO|" \
+      "$DIR/.env.example" > "$DIR/.env"
+  chmod 600 "$DIR/.env"
+  echo "  created with random passwords · site: ${SITE:-localhost} · TLS: ${EMAIL:-internal (set CADDY_TLS to an e-mail for a real certificate)}"
+else
+  echo "  kept the existing one"
+fi
+
 echo
 echo "✓ Done. Next:"
 echo "  1. exit, then ssh in again (so 'docker' works without sudo)"
-echo "  2. nano ~/RupRao/.env   — SITE_ADDRESS (your domain, or ${IP//./-}.sslip.io), CADDY_TLS, passwords"
+echo "  2. check ~/RupRao/.env  (SITE_ADDRESS, CADDY_TLS) — admin password: grep ADMIN_PASSWORD ~/RupRao/.env"
 echo "  3. cd ~/RupRao && docker compose -f docker-compose.yml -f docker-compose.gcp.yml up -d --build"
