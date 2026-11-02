@@ -1,6 +1,8 @@
 """Face detection (SCRFD) + 512-d ArcFace embeddings via InsightFace on ONNX Runtime (CPU)."""
 
+import fcntl
 import logging
+import os
 import threading
 from dataclasses import dataclass
 
@@ -50,12 +52,20 @@ class FaceService:
             from insightface.app import FaceAnalysis
 
             log.info("Loading face model %s into %s (downloads on first run)", settings.face_model, settings.model_dir)
-            app = FaceAnalysis(
-                name=settings.face_model,
-                root=settings.model_dir,
-                allowed_modules=["detection", "recognition"],
-                providers=["CPUExecutionProvider"],
-            )
+            # api and worker share the model folder and start together: a file lock makes the first
+            # one download/unzip while the other waits, instead of reading a half-written .onnx.
+            os.makedirs(settings.model_dir, exist_ok=True)
+            with open(os.path.join(settings.model_dir, ".download.lock"), "w") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                try:
+                    app = FaceAnalysis(
+                        name=settings.face_model,
+                        root=settings.model_dir,
+                        allowed_modules=["detection", "recognition"],
+                        providers=["CPUExecutionProvider"],
+                    )
+                finally:
+                    fcntl.flock(lock, fcntl.LOCK_UN)
             app.prepare(ctx_id=-1, det_size=(settings.face_det_size, settings.face_det_size))
             self._app = app
             log.info("Face model ready")
