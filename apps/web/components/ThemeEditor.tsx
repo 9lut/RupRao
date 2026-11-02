@@ -412,7 +412,7 @@ function ColorField({
         maxLength={7}
         spellCheck={false}
         aria-label={`รหัสสี ${label}`}
-        className={`w-[74px] rounded-lg bg-soft px-2 py-1 font-mono text-[11px] outline-none focus:ring-2 focus:ring-ink/10 ${overridden ? "text-ink" : "text-muted"}`}
+        className={`w-[92px] shrink-0 rounded-lg bg-soft px-2 py-1 font-mono text-[11px] outline-none focus:ring-2 focus:ring-ink/10 ${overridden ? "text-ink" : "text-muted"}`}
       />
       {overridden && (
         <button type="button" onClick={onClear} title="กลับเป็นค่าเดิม" className="text-xs text-muted hover:text-ink">

@@ -11,6 +11,17 @@
 
 html {
   color-scheme: light;
+  touch-action: manipulation; /* no zoom on double tap; pinching to zoom still works */
+}
+
+/* iOS zooms the page when a field with text under 16px gets focus, and leaves it zoomed. Unlayered,
+   so this beats text-sm and friends without touching every field. */
+@media (pointer: coarse) {
+  input:not(.text-lg),
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }
 
 body {
