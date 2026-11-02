@@ -41,5 +41,9 @@ services:
     command: redis-server --appendonly yes --maxmemory 96mb --maxmemory-policy noeviction
   minio:
     <<: *logging
-    mem_limit: 384m
+    mem_limit: 512m
+    environment:
+      # MinIO sizes this from its memory limit, and at 384 MB it answered 429 to some thumbnails
+      # with 500 people on the site.
+      MINIO_API_REQUESTS_MAX: "300"
     ports: !reset []

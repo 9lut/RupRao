@@ -1,0 +1,33 @@
+# Test tools in Docker. They only run when called, and never start with the normal stack.
+#
+# Against the stack on this machine (safe: nobody else is affected):
+#   TOKEN=<share token> TEST=spike docker compose -f docker-compose.yml -f docker-compose.test.yml run --rm k6
+#   docker compose -f docker-compose.yml -f docker-compose.test.yml run --rm zap
+#
+# Against a real server (set BASE; people using the site will feel it):
+#   BASE=https://your.site TOKEN=<share token> TEST=load docker compose -f docker-compose.yml -f docker-compose.test.yml run --rm k6
+#
+# TEST=load | spike | stress, see scripts/k6/event.js. This machine's numbers show how the app behaves,
+# not what the server can take: its CPU is not the server's. The event needs its album opened.
+name: ai-photo-finder
+
+services:
+  k6:
+    image: grafana/k6:latest
+    profiles: [test]
+    # Share Caddy's network, because Caddy only answers plain HTTP for "localhost".
+    network_mode: service:caddy
+    environment:
+      BASE: ${BASE:-http://localhost:8080}
+      TOKEN: ${TOKEN:-}
+      TEST: ${TEST:-load}
+    volumes:
+      - ./scripts/k6:/scripts:ro
+    command: run --no-color /scripts/event.js
+
+  # OWASP ZAP baseline: looks at responses and reports problems, sends no attacks.
+  zap:
+    image: ghcr.io/zaproxy/zaproxy:stable
+    profiles: [test]
+    network_mode: service:caddy
+    command: zap-baseline.py -t ${BASE:-http://localhost:8080} -m 2 -I
