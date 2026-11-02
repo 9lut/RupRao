@@ -25,11 +25,13 @@ export const BRAND_ASSETS = {
 export const CREDIT = { name: "Lutfee", label: "พัฒนาโดย Lutfee" } as const;
 
 /**
- * Who the About page credits on this deployment. Defaults to CREDIT; a deployment can show its
- * own maintainer with CREDIT_NAME / CREDIT_PHOTO (read at request time, server side only).
+ * Who the About page credits on this deployment: always CREDIT first, then the deployment's own
+ * developer from CREDIT_NAME / CREDIT_PHOTO if set (read at request time, server side only).
  */
-export function deploymentCredit(): { name: string; photo: string | null } {
-  return { name: process.env.CREDIT_NAME || CREDIT.name, photo: process.env.CREDIT_PHOTO || null };
+export function deploymentCredits(): { name: string; photo: string | null }[] {
+  const credits: { name: string; photo: string | null }[] = [{ name: CREDIT.name, photo: null }];
+  if (process.env.CREDIT_NAME) credits.push({ name: process.env.CREDIT_NAME, photo: process.env.CREDIT_PHOTO || null });
+  return credits;
 }
 
 /** Simplified face-scan geometry (64-unit grid) for small UI glyphs such as the scan button. */

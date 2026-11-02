@@ -51,7 +51,7 @@ services:
     container_name: ai-photo-web
     restart: unless-stopped
     environment:
-      # Optional: who the About page credits on this deployment (default: Lutfee).
+      # Optional: a second developer on the About page, listed after Lutfee.
       CREDIT_NAME: ${CREDIT_NAME:-}
       CREDIT_PHOTO: ${CREDIT_PHOTO:-}
     networks:

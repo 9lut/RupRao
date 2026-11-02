@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import BackButton from "@/components/BackButton";
-import { BRAND_ASSETS, deploymentCredit, RupRaoMark } from "@/components/brand";
+import { BRAND_ASSETS, deploymentCredits, RupRaoMark } from "@/components/brand";
 
 export const metadata: Metadata = { title: "เกี่ยวกับเรา · รูปเรา (RupRao)" };
 // The credit comes from the server's environment, so render per request rather than at build.
@@ -21,7 +21,7 @@ const PROMISES = [
 ];
 
 export default function AboutPage() {
-  const credit = deploymentCredit();
+  const credits = deploymentCredits();
   return (
     <div className="mx-auto max-w-3xl px-4 pb-24 pt-6 sm:px-6">
       <BackButton />
@@ -77,23 +77,30 @@ export default function AboutPage() {
       <section className="mt-16">
         <p className="text-xs uppercase tracking-[0.2em] text-muted">Made by</p>
         <h2 className="mt-2 text-xl font-semibold">ผู้พัฒนา</h2>
-        <div className="mt-6 flex flex-col items-center gap-5 rounded-[32px] border border-line bg-gradient-to-b from-white to-soft p-8 text-center sm:flex-row sm:text-left">
-          {credit.photo ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={credit.photo} alt={credit.name} className="h-24 w-24 shrink-0 rounded-full object-cover ring-4 ring-white shadow-md" />
-          ) : (
-            <div className="grid h-20 w-20 shrink-0 place-items-center rounded-full bg-white ring-1 ring-line">
-              <RupRaoMark size={60} />
+        <p className="mt-3 text-sm leading-relaxed text-muted">
+          ออกแบบและพัฒนา รูปเรา (RupRao) ตั้งแต่ระบบ AI จดจำใบหน้า หลังบ้าน ไปจนถึงหน้าตาที่คุณใช้อยู่ —
+          เพื่อให้ทุกงานแจกรูปได้ง่าย และทุกคนได้รูปของตัวเองอย่างปลอดภัย
+        </p>
+        <div className="mt-6 space-y-4">
+          {credits.map((credit) => (
+            <div
+              key={credit.name}
+              className="flex flex-col items-center gap-5 rounded-[32px] border border-line bg-gradient-to-b from-white to-soft p-8 text-center sm:flex-row sm:text-left"
+            >
+              {credit.photo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={credit.photo} alt={credit.name} className="h-24 w-24 shrink-0 rounded-full object-cover ring-4 ring-white shadow-md" />
+              ) : (
+                <div className="grid h-24 w-24 shrink-0 place-items-center rounded-full bg-white ring-1 ring-line">
+                  <RupRaoMark size={68} />
+                </div>
+              )}
+              <div>
+                <p className="text-sm text-muted">พัฒนาโดย</p>
+                <p className="mt-0.5 text-2xl font-semibold tracking-tight">{credit.name}</p>
+              </div>
             </div>
-          )}
-          <div>
-            <p className="text-sm text-muted">พัฒนาโดย</p>
-            <p className="mt-0.5 text-2xl font-semibold tracking-tight">{credit.name}</p>
-            <p className="mt-2 text-sm leading-relaxed text-muted">
-              ออกแบบและพัฒนา รูปเรา (RupRao) ตั้งแต่ระบบ AI จดจำใบหน้า หลังบ้าน ไปจนถึงหน้าตาที่คุณใช้อยู่ —
-              เพื่อให้ทุกงานแจกรูปได้ง่าย และทุกคนได้รูปของตัวเองอย่างปลอดภัย
-            </p>
-          </div>
+          ))}
         </div>
       </section>
 
