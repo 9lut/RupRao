@@ -53,7 +53,7 @@ export default function Header() {
           )}
         </Link>
         )}
-        <nav className="flex min-w-0 items-center gap-0.5 whitespace-nowrap text-sm sm:gap-1">
+        <nav className="flex min-w-0 items-center gap-0.5 overflow-x-auto whitespace-nowrap text-sm [scrollbar-width:none] sm:gap-1">
           {inAdmin ? (
             <>
               <Link
@@ -101,16 +101,19 @@ export default function Header() {
             </>
           ) : (
             [
-              { href: "/guide", label: "วิธีใช้" },
-              { href: "/about", label: "เกี่ยวกับเรา", wide: true }, // no room on phones
-              { href: "/privacy", label: "ความเป็นส่วนตัว" },
+              // Phones get shorter labels so all three fit beside the logo.
+              { href: "/guide", label: "วิธีใช้", short: "วิธีใช้" },
+              { href: "/about", label: "เกี่ยวกับเรา", short: "เกี่ยวกับ" },
+              { href: "/privacy", label: "ความเป็นส่วนตัว", short: "นโยบาย" },
             ].map((l) => (
               <Link
                 key={l.href}
                 href={l.href}
-                className={`rounded-full px-3 py-1.5 transition ${"wide" in l ? "hidden sm:inline" : ""} ${pathname === l.href ? "bg-soft text-ink" : linkIdle}`}
+                aria-label={l.label}
+                className={`shrink-0 rounded-full px-2 py-1.5 transition sm:px-3 ${pathname === l.href ? "bg-soft text-ink" : linkIdle}`}
               >
-                {l.label}
+                <span className="sm:hidden">{l.short}</span>
+                <span className="hidden sm:inline">{l.label}</span>
               </Link>
             ))
           )}
