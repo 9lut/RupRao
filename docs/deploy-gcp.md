@@ -591,5 +591,5 @@ TRUSTED_PROXIES=private_ranges             # เชื่อ header จาก cl
 | อัปโหลดไม่ผ่าน 413 | ไฟล์เดียวใหญ่เกิน 20 MB (ตั้ง `MAX_UPLOAD_MB`) |
 | api รีสตาร์ตวน | `dc logs api`, `free -h` · RAM ไม่พอ: ตรวจ swap (`swapon --show`) หรือขยายเครื่อง |
 | `/mnt/data` หายหลังรีบูต | `cat /etc/fstab` ต้องมีบรรทัด UUID ของดิสก์ · รัน `sudo mount -a` |
-| ดิสก์ใกล้เต็ม | `df -h /mnt/data`, `docker system df` · ลบ image เก่า `docker image prune -a` · ขยายดิสก์ (ข้อ 14) |
+| ดิสก์ใกล้เต็ม | ดูได้ที่เมนู "ภาพรวม" ของแอดมินใหญ่ (ระบบหยุดรับรูปเมื่อเหลือน้อยกว่า `STORAGE_MIN_FREE_GB`, ค่าเริ่มต้น 2 GB) · `df -h /mnt/data`, `docker system df` · ลบ image เก่า `docker image prune -a` · ขยายดิสก์ (ข้อ 14) |
 | ค้นหาโดนจำกัดทั้งที่ใช้น้อย (หลัง Cloudflare) | ยังไม่ได้ตั้ง `TRUSTED_PROXIES` (ข้อ 8.3 ขั้น 5) |

@@ -73,6 +73,14 @@ class StorageService:
             if keys:
                 self.delete(*keys)
 
+    def sizes(self, prefix: str) -> dict[str, int]:
+        paginator = self._internal.get_paginator("list_objects_v2")
+        return {
+            obj["Key"]: obj["Size"]
+            for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix)
+            for obj in page.get("Contents", [])
+        }
+
     def get_url(self, key: str, download_name: str | None = None) -> str:
         base = settings.s3_public_url or public_base_var.get() or settings.s3_direct_public_url
         parsed = urlsplit(base)

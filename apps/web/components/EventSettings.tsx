@@ -2,9 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { adminApi, type AdminEvent, type Calibration } from "@/lib/api";
+import { useAdminMe } from "@/lib/adminMe";
+import { fmtBytes, gbToQuota, quotaToGb } from "@/lib/bytes";
 import { asTheme, type ThemeCustom, type ThemeKey } from "@/lib/themes";
 import { useConfirm } from "./Confirm";
 import OwnerSelect from "./OwnerSelect";
+import { QuotaInput } from "./StorageBar";
 import ThemeEditor from "./ThemeEditor";
 
 const inputCls =
@@ -18,6 +21,8 @@ function toDateInput(iso: string | null) {
 
 export default function EventSettings({ event, onSaved }: { event: AdminEvent; onSaved: (e: AdminEvent) => void }) {
   const confirm = useConfirm();
+  const me = useAdminMe();
+  const [quota, setQuota] = useState(quotaToGb(event.storage_quota_bytes));
   const [name, setName] = useState(event.name);
   const [description, setDescription] = useState(event.description ?? "");
   const [code, setCode] = useState(event.access_code ?? "");
@@ -106,6 +111,7 @@ export default function EventSettings({ event, onSaved }: { event: AdminEvent; o
         theme_custom: { ...themeCustom, links: filledLinks(themeCustom) },
         // Only super admins may change it (the API refuses otherwise), so only send real changes.
         ...(ownerId !== event.owner_id ? { owner_id: ownerId } : {}),
+        ...(quota !== quotaToGb(event.storage_quota_bytes) ? { storage_quota_bytes: gbToQuota(quota) } : {}),
       });
       onSaved(updated);
       setBannerPick(null);
@@ -158,6 +164,11 @@ export default function EventSettings({ event, onSaved }: { event: AdminEvent; o
           </span>
         </label>
         <OwnerSelect value={ownerId} onChange={setOwnerId} />
+        {me?.role === "superadmin" && (
+          <Field label="จำกัดพื้นที่อัลบั้มนี้" hint={`ตอนนี้ใช้ไป ${fmtBytes(event.storage_bytes)} · เว้นว่าง = ไม่จำกัด · เต็มแล้วจะอัปโหลดเพิ่มไม่ได้ แต่รูปเดิมยังอยู่ครบ`}>
+            <QuotaInput value={quota} onChange={setQuota} className={inputCls} />
+          </Field>
+        )}
         <Field label="วันที่ลบข้อมูลอัตโนมัติ" hint="เมื่อถึงวันนี้ รูปและข้อมูลใบหน้าทั้งหมดของอีเวนต์จะถูกลบถาวร เว้นว่าง = ไม่ลบอัตโนมัติ">
           <div className="flex gap-2">
             <input type="date" value={expires} onChange={(e) => setExpires(e.target.value)} className={inputCls} />

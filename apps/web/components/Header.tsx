@@ -63,12 +63,21 @@ export default function Header() {
                 อีเวนต์
               </Link>
               {me?.role === "superadmin" && (
-                <Link
-                  href="/admin/users"
-                  className={`rounded-full px-2.5 py-1.5 transition sm:px-3 ${pathname.startsWith("/admin/users") ? "bg-soft text-ink" : "text-muted hover:text-ink"}`}
-                >
-                  ผู้จัดงาน
-                </Link>
+                <>
+                  {/* No room on phones; /admin links to it instead. */}
+                  <Link
+                    href="/admin/system"
+                    className={`hidden rounded-full px-3 py-1.5 transition sm:inline ${pathname.startsWith("/admin/system") ? "bg-soft text-ink" : "text-muted hover:text-ink"}`}
+                  >
+                    ภาพรวม
+                  </Link>
+                  <Link
+                    href="/admin/users"
+                    className={`rounded-full px-2.5 py-1.5 transition sm:px-3 ${pathname.startsWith("/admin/users") ? "bg-soft text-ink" : "text-muted hover:text-ink"}`}
+                  >
+                    ผู้จัดงาน
+                  </Link>
+                </>
               )}
               <Link href="/guide#organizer" className="hidden rounded-full px-3 py-1.5 text-muted transition hover:text-ink sm:inline">
                 คู่มือ

@@ -9,6 +9,7 @@ import Gallery, { GallerySkeleton, useSelection } from "@/components/Gallery";
 import Lightbox from "@/components/Lightbox";
 import SelectionBar from "@/components/SelectionBar";
 import ShareCard from "@/components/ShareCard";
+import { StorageBar, UsageText } from "@/components/StorageBar";
 import UploadPanel from "@/components/UploadPanel";
 import { adminApi, type AdminEvent, type AdminPhoto, type PhotoStatus, type RemovalRequest } from "@/lib/api";
 
@@ -75,6 +76,12 @@ function EventDetail({ params }: { params: Promise<{ id: string }> }) {
     return () => clearInterval(t);
   }, [pending, load]);
 
+  // Visitor numbers move during the event; refresh them without re-listing every photo.
+  useEffect(() => {
+    const t = setInterval(() => adminApi.getEvent(id).then(setEvent).catch(() => {}), 30_000);
+    return () => clearInterval(t);
+  }, [id]);
+
   const deleteEvent = async () => {
     if (!event) return;
     const ok = await confirm({
@@ -135,6 +142,25 @@ function EventDetail({ params }: { params: Promise<{ id: string }> }) {
         </button>
       </div>
 
+      {event && (
+        <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="rounded-2xl border border-line p-4">
+            <p className="text-xs text-muted">พื้นที่ที่ใช้</p>
+            <p className="mt-1 text-xl font-semibold tabular-nums">
+              <UsageText used={event.storage_bytes} limit={event.storage_quota_bytes} />
+            </p>
+            {event.storage_quota_bytes === null ? (
+              <p className="mt-0.5 text-[11px] text-muted">ไม่จำกัดพื้นที่</p>
+            ) : (
+              <StorageBar used={event.storage_bytes} limit={event.storage_quota_bytes} className="mt-2" />
+            )}
+          </div>
+          <PeopleStat label="คนเข้าดู" people={event.visitors} />
+          <PeopleStat label="คนสแกนหน้า" people={event.scan_people} detail={`รวม ${event.scans.toLocaleString()} ครั้ง`} />
+          <PeopleStat label="คนดาวน์โหลด" people={event.download_people} detail={`รวม ${event.downloads.toLocaleString()} รูป`} />
+        </div>
+      )}
+
       {justCreated && (
         <div className="fade-in mt-6 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-emerald-200 bg-emerald-50/60 p-5">
           <div>
@@ -179,6 +205,18 @@ function EventDetail({ params }: { params: Promise<{ id: string }> }) {
         {tab === "settings" && event && <EventSettings key={event.id} event={event} onSaved={setEvent} />}
         {tab === "requests" && <RequestsTab eventId={id} onChanged={load} />}
       </div>
+    </div>
+  );
+}
+
+function PeopleStat({ label, people, detail }: { label: string; people: number; detail?: string }) {
+  return (
+    <div className="rounded-2xl border border-line p-4">
+      <p className="text-xs text-muted">{label}</p>
+      <p className="mt-1 text-xl font-semibold tabular-nums">
+        {people.toLocaleString()} <span className="text-xs font-normal text-muted">คน</span>
+      </p>
+      {detail && <p className="mt-0.5 text-[11px] text-muted">{detail}</p>}
     </div>
   );
 }

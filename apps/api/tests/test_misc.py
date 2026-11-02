@@ -1,6 +1,11 @@
+import uuid
+from types import SimpleNamespace
+
 from app.services.face_service import det_size_for
 from app.services.rate_limit import hit
 from app.services.storage_service import with_path_prefix
+from app.services.usage import disk_usage, upload_block
+from app.services.visitors import visitor_key
 
 
 def test_det_size_scales_with_photo():
@@ -51,6 +56,56 @@ class FakePipe:
             else:
                 out.append(self.r.ttls.get(op[1], -1))
         return out
+
+
+def test_visitor_key_is_per_event_and_rejects_junk():
+    a, b = uuid.uuid4(), uuid.uuid4()
+    raw = "0123456789abcdef0123456789abcdef"
+    assert visitor_key(a, raw) == visitor_key(a, raw)
+    assert visitor_key(a, raw) != visitor_key(b, raw)  # can't follow someone across events
+    assert raw not in visitor_key(a, raw)
+    assert len(visitor_key(a, raw)) <= 64  # fits the column
+    for junk in (None, "", "short", "x" * 65, "not valid id with spaces!!"):
+        assert visitor_key(a, junk) is None
+
+
+class FakeUsageDb:
+    """Answers upload_block's sums in the order it asks for them."""
+
+    def __init__(self, *sums, owner=None):
+        self.sums, self.owner = list(sums), owner
+
+    def scalar(self, _):
+        return self.sums.pop(0)
+
+    def get(self, *_):
+        return self.owner
+
+
+def test_upload_block_checks_album_then_owner(monkeypatch):
+    monkeypatch.setattr("app.services.usage.disk_usage", lambda: None)
+    event = SimpleNamespace(id=uuid.uuid4(), owner_id=uuid.uuid4(), storage_quota_bytes=100)
+    owner = SimpleNamespace(id=event.owner_id, storage_quota_bytes=500)
+    assert upload_block(FakeUsageDb(50, 400, owner=owner), event, 50) is None  # exactly full still fits
+    assert "อัลบั้ม" in upload_block(FakeUsageDb(50, owner=owner), event, 51)
+    event.storage_quota_bytes = None
+    assert "บัญชี" in upload_block(FakeUsageDb(450, owner=owner), event, 51)
+    owner.storage_quota_bytes = None
+    assert upload_block(FakeUsageDb(owner=owner), event, 51) is None
+
+
+def test_upload_block_keeps_disk_space_free(monkeypatch):
+    event = SimpleNamespace(id=uuid.uuid4(), owner_id=None, storage_quota_bytes=None)
+    gb = 1024**3
+    monkeypatch.setattr("app.services.usage.disk_usage", lambda: {"total": 100 * gb, "used": 97 * gb, "free": 3 * gb})
+    assert upload_block(FakeUsageDb(), event, 100) is None
+    monkeypatch.setattr("app.services.usage.disk_usage", lambda: {"total": 100 * gb, "used": 99 * gb, "free": gb})
+    assert "เซิร์ฟเวอร์" in upload_block(FakeUsageDb(), event, 100)
+
+
+def test_disk_usage_is_none_without_the_volume(monkeypatch):
+    monkeypatch.setattr("app.services.usage.settings.storage_disk_path", "/no/such/path")
+    assert disk_usage() is None
 
 
 def test_rate_limit_blocks_after_limit():

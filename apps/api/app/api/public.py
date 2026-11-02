@@ -18,7 +18,7 @@ from app.db.models import Event, Photo, RemovalRequest
 from app.schemas.common import (
     EventPublicOut, FaceBox, PhotoIds, PublicPhotoOut, PublicPhotoPage, RemovalCreate, SearchMatch, SearchResult,
 )
-from app.services import rate_limit
+from app.services import rate_limit, visitors
 from app.services.auth import sign_value
 from app.services.face_service import FaceBusy, face_service
 from app.services.image_service import ImageValidationError, load_image, to_bgr_array
@@ -105,6 +105,12 @@ def check_access(event: Event = Depends(accessible_event)):
     return {"ok": True}
 
 
+@router.post("/events/{token}/visit", status_code=status.HTTP_204_NO_CONTENT)
+def visit(token: str, request: Request, db: Session = Depends(get_db)):
+    """Someone opened the event page (the web app calls this once per page load)."""
+    visitors.record(db, request, _event_by_token(db, token).id)
+
+
 @router.post("/events/{token}/search", response_model=SearchResult)
 async def search(
     request: Request,
@@ -144,7 +150,7 @@ async def search(
     matches = await run_in_threadpool(
         search_event, db, event_id, faces[face_index].embedding, threshold, settings.search_max_results
     )
-    return SearchResult(
+    result = SearchResult(
         query_faces=[FaceBox(x=f.x, y=f.y, width=f.width, height=f.height) for f in faces],
         face_index=face_index,
         query_width=img.width,
@@ -160,14 +166,19 @@ async def search(
             for m in matches
         ],
     )
+    await run_in_threadpool(visitors.record, db, request, event_id, "scan")
+    return result
 
 
 @router.get("/events/{token}/photos/{photo_id}/download")
-def download_url(photo_id: uuid.UUID, event: Event = Depends(accessible_event), db: Session = Depends(get_db)):
+def download_url(
+    photo_id: uuid.UUID, request: Request, event: Event = Depends(accessible_event), db: Session = Depends(get_db)
+):
     photos = _photos_in_event(db, event, [photo_id])
     if not photos:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "ไม่พบรูปภาพ")
     name = f"photo-{str(photo_id)[:8]}.jpg"
+    visitors.record(db, request, event.id, "download")
     if watermark_options(event) is None:
         return {"url": storage.get_url(photos[0].storage_key, download_name=name)}
     # Watermarked copies are made on the fly; hand out a short-lived signed link to this API.
@@ -203,6 +214,7 @@ def download_zip(
     if not photos:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "ไม่พบรูปภาพ")
     opts = watermark_options(event)
+    visitors.record(db, request, event.id, "download", len(photos))
     return StreamingResponse(
         build_zip(photos, (lambda data: apply_watermark(data, opts)) if opts else None),
         media_type="application/zip",

@@ -11,13 +11,14 @@ from app.db.database import get_db
 from app.db.models import Event, User
 from app.schemas.common import UserCreate, UserOut, UserUpdate
 from app.services.auth import Principal, find_user, hash_password, require_superadmin
+from app.services.usage import owner_bytes
 
 router = APIRouter(prefix="/admin/users", tags=["users"], dependencies=[Depends(require_superadmin)])
 
 
 def _out(db: Session, user: User) -> UserOut:
     count = db.scalar(select(func.count(Event.id)).where(Event.owner_id == user.id)) or 0
-    return UserOut.model_validate({**user.__dict__, "event_count": count})
+    return UserOut.model_validate({**user.__dict__, "event_count": count, "storage_bytes": owner_bytes(db, user.id)})
 
 
 def _get(db: Session, user_id: uuid.UUID) -> User:
@@ -41,6 +42,7 @@ def create_user(body: UserCreate, db: Session = Depends(get_db)):
         display_name=(body.display_name or "").strip() or None,
         password_hash=hash_password(body.password),
         role=body.role,
+        storage_quota_bytes=body.storage_quota_bytes,
     )
     db.add(user)
     db.commit()
@@ -61,6 +63,8 @@ def update_user(user_id: uuid.UUID, body: UserUpdate, db: Session = Depends(get_
         user.role = body.role
     if body.active is not None:
         user.active = body.active
+    if "storage_quota_bytes" in body.model_fields_set:
+        user.storage_quota_bytes = body.storage_quota_bytes
     db.commit()
     db.refresh(user)
     return _out(db, user)

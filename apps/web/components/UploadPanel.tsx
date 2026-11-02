@@ -81,7 +81,9 @@ export default function UploadPanel({ eventId, onUploaded }: { eventId: string; 
     const phashOf = new Map(list.map((x) => [x.file, x.phash]));
 
     // Small batches keep requests short and let the gallery fill in progressively.
-    for (const batch of batches(list.map((x) => x.file))) {
+    const all = batches(list.map((x) => x.file));
+    for (const [i, batch] of all.entries()) {
+      let full = false;
       try {
         const res = await uploadPhotos(
           eventId,
@@ -90,6 +92,7 @@ export default function UploadPanel({ eventId, onUploaded }: { eventId: string; 
           batch.map((f) => phashOf.get(f) ?? null),
         );
         progress.errors.push(...res.errors.map((e) => `${e.filename ?? "ไฟล์"}: ${e.error}`));
+        full = res.storage_full;
       } catch (e) {
         progress.errors.push(e instanceof Error ? e.message : "อัปโหลดไม่สำเร็จ");
       }
@@ -97,6 +100,11 @@ export default function UploadPanel({ eventId, onUploaded }: { eventId: string; 
       progress.fraction = progress.done / progress.total;
       setStage({ kind: "uploading", progress: { ...progress } });
       onUploaded();
+      if (full) {
+        // The rest would be sent only to be refused.
+        for (const f of all.slice(i + 1).flat()) progress.errors.push(`${f.name}: พื้นที่เต็ม ยังไม่ได้อัปโหลด`);
+        break;
+      }
     }
     setStage({ kind: "finished", progress });
   };

@@ -24,6 +24,8 @@ export interface AdminUser {
   created_at: string;
   last_login_at: string | null;
   event_count: number;
+  storage_bytes: number;
+  storage_quota_bytes: number | null;
 }
 
 export type PhotoStatus = "PENDING" | "PROCESSING" | "PROCESSED" | "FAILED";
@@ -52,6 +54,13 @@ export interface AdminEvent {
   failed_count: number;
   pending_removals: number;
   cover_url: string | null;
+  storage_bytes: number;
+  storage_quota_bytes: number | null;
+  visitors: number;
+  scan_people: number;
+  scans: number;
+  download_people: number;
+  downloads: number;
 }
 
 export interface PublicEvent {
@@ -112,6 +121,8 @@ export interface SearchResult {
 export interface UploadResult {
   uploaded: AdminPhoto[];
   errors: { filename: string | null; error: string }[];
+  /** Out of space: sending the rest of the upload is pointless. */
+  storage_full: boolean;
 }
 
 export interface RemovalRequest {
@@ -140,6 +151,48 @@ export interface AdminStats {
   faces: number;
   pending_removals: number;
   queue: { queued: number; failed: number; running: number } | null;
+  storage_bytes: number;
+  storage_quota_bytes: number | null;
+  /** Super admins only. */
+  disk: DiskUsage | null;
+  visitors: number;
+  scan_people: number;
+  scans: number;
+  download_people: number;
+  downloads: number;
+}
+
+export interface DiskUsage {
+  total: number;
+  used: number;
+  free: number;
+}
+
+interface UsageRow {
+  photos: number;
+  bytes: number;
+  quota_bytes: number | null;
+  visitors: number;
+  scan_people: number;
+  download_people: number;
+}
+
+export interface SystemOverview {
+  disk: DiskUsage | null;
+  min_free_bytes: number;
+  photos_bytes: number;
+  events: number;
+  photos: number;
+  faces: number;
+  accounts: number;
+  queue: { queued: number; failed: number; running: number } | null;
+  visitors: number;
+  scan_people: number;
+  scans: number;
+  download_people: number;
+  downloads: number;
+  owners: (UsageRow & { id: string | null; name: string; username: string | null; active: boolean; events: number })[];
+  top_events: (UsageRow & { id: string; name: string })[];
 }
 
 export class ApiError extends Error {
@@ -246,13 +299,14 @@ export const adminApi = {
   },
   me: () => admin<AdminMe>("/auth/me"),
   listUsers: () => admin<AdminUser[]>("/admin/users"),
-  createUser: (body: { username: string; password: string; display_name?: string | null; role: Role }) =>
+  createUser: (body: { username: string; password: string; display_name?: string | null; role: Role; storage_quota_bytes?: number | null }) =>
     admin<AdminUser>("/admin/users", { method: "POST", ...jsonBody(body) }),
-  updateUser: (id: string, body: { display_name?: string | null; password?: string; role?: Role; active?: boolean }) =>
+  updateUser: (id: string, body: { display_name?: string | null; password?: string; role?: Role; active?: boolean; storage_quota_bytes?: number | null }) =>
     admin<AdminUser>(`/admin/users/${id}`, { method: "PATCH", ...jsonBody(body) }),
   deleteUser: (id: string) => admin<void>(`/admin/users/${id}`, { method: "DELETE" }),
   photoHashes: (eventId: string) => admin<{ content_hashes: string[]; phashes: string[] }>(`/admin/events/${eventId}/photo-hashes`),
   stats: () => admin<AdminStats>("/admin/stats"),
+  system: () => admin<SystemOverview>("/admin/system"),
   listEvents: () => admin<AdminEvent[]>("/admin/events"),
   getEvent: (id: string) => admin<AdminEvent>(`/admin/events/${id}`),
   createEvent: (body: {
@@ -264,7 +318,7 @@ export const adminApi = {
     public_album?: boolean;
     owner_id?: string | null;
   }) => admin<AdminEvent>("/admin/events", { method: "POST", ...jsonBody(body) }),
-  updateEvent: (id: string, body: Partial<Pick<AdminEvent, "name" | "description" | "access_code" | "match_threshold" | "expires_at" | "public_album" | "theme" | "theme_custom" | "owner_id">>) =>
+  updateEvent: (id: string, body: Partial<Pick<AdminEvent, "name" | "description" | "access_code" | "match_threshold" | "expires_at" | "public_album" | "theme" | "theme_custom" | "owner_id" | "storage_quota_bytes">>) =>
     admin<AdminEvent>(`/admin/events/${id}`, { method: "PATCH", ...jsonBody(body) }),
   /** Event page look: background photo, logo, or browser-tab icon. */
   uploadAsset: (id: string, asset: EventAsset, file: File) => {
@@ -326,14 +380,35 @@ export function uploadPhotos(
 
 // ---------- public (attendees) ----------
 
+const VISITOR_KEY = "ruprao_visitor";
+let visitor: string | null = null;
+
+/** Random and anonymous, only so the organizer's numbers count people rather than requests. */
+function visitorId(): string {
+  if (visitor) return visitor;
+  try {
+    visitor = localStorage.getItem(VISITOR_KEY);
+  } catch {}
+  if (!visitor) {
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    visitor = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    try {
+      localStorage.setItem(VISITOR_KEY, visitor);
+    } catch {}
+  }
+  return visitor;
+}
+
 function codeInit(code: string | null, init: RequestInit = {}): RequestInit {
   const headers = new Headers(init.headers);
   if (code) headers.set("X-Event-Code", code);
+  headers.set("X-Visitor-Id", visitorId());
   return { ...init, headers };
 }
 
 export const publicApi = {
   getEvent: (token: string) => json<PublicEvent>(`/public/events/${token}`),
+  visit: (token: string) => json<void>(`/public/events/${token}/visit`, codeInit(null, { method: "POST" })),
   checkAccess: (token: string, code: string) =>
     json<{ ok: boolean }>(`/public/events/${token}/access`, codeInit(code, { method: "POST" })),
   search: (token: string, code: string | null, file: File, faceIndex = 0) => {

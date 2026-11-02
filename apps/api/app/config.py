@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     max_files_per_upload: int = 50
     thumbnail_size: int = 720
 
+    # --- Storage ---
+    storage_disk_path: str = "/storage-data"  # where the photo volume is mounted, to read disk free space
+    storage_min_free_gb: float = 2  # refuse uploads below this, so Postgres never hits a full disk
+
     # --- Search ---
     search_default_threshold: float = 0.4
     search_max_results: int = 200
@@ -68,6 +72,7 @@ class Settings(BaseSettings):
     rate_access_per_minute: int = 600  # every request to a code-protected event counts
     rate_removal_per_hour: int = 60
     rate_zip_per_hour: int = 300
+    rate_visitor_per_minute: int = 1200  # above this, visits simply stop being counted
 
 
 @lru_cache

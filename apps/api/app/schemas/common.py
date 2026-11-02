@@ -38,6 +38,7 @@ class UploadError(BaseModel):
 class UploadResult(BaseModel):
     uploaded: list[PhotoOut]
     errors: list[UploadError]
+    storage_full: bool = False  # no point sending the rest of a big upload
 
 
 # Attendee-page looks. Keep in sync with apps/web/lib/themes.ts.
@@ -117,6 +118,7 @@ class EventUpdate(BaseModel):
     theme: EventTheme | None = None
     theme_custom: ThemeCustom | None = None
     owner_id: uuid.UUID | None = None  # super admin only
+    storage_quota_bytes: int | None = Field(default=None, ge=0)  # super admin only; null = unlimited
 
     _code = field_validator("access_code")(_clean_code)
 
@@ -145,6 +147,14 @@ class EventAdminOut(BaseModel):
     failed_count: int = 0
     pending_removals: int = 0
     cover_url: str | None = None
+    storage_bytes: int = 0
+    storage_quota_bytes: int | None = None
+    # People (anonymous browsers) and how much they did.
+    visitors: int = 0
+    scan_people: int = 0
+    scans: int = 0
+    download_people: int = 0
+    downloads: int = 0
 
 
 class EventPublicOut(BaseModel):
@@ -222,6 +232,7 @@ class UserCreate(BaseModel):
     password: Password
     display_name: str | None = Field(default=None, max_length=255)
     role: RoleName = "organizer"
+    storage_quota_bytes: int | None = Field(default=None, ge=0)  # null = unlimited
 
 
 class UserUpdate(BaseModel):
@@ -229,6 +240,7 @@ class UserUpdate(BaseModel):
     password: Password | None = None  # set = reset the password
     role: RoleName | None = None
     active: bool | None = None
+    storage_quota_bytes: int | None = Field(default=None, ge=0)  # send null to remove the limit
 
 
 class UserOut(BaseModel):
@@ -240,3 +252,5 @@ class UserOut(BaseModel):
     created_at: datetime
     last_login_at: datetime | None
     event_count: int = 0
+    storage_bytes: int = 0
+    storage_quota_bytes: int | None = None

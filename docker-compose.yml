@@ -63,6 +63,10 @@ services:
     environment:
       MODEL_DIR: /app/models
       API_ROOT_PATH: /api
+    volumes:
+      - ./data/models:/app/models
+      # Only to read how full the photo disk is (admin overview, upload guard).
+      - minio-data:/storage-data:ro
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:

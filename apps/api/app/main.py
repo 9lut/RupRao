@@ -14,9 +14,17 @@ from app.db.migrate import run_migrations
 from app.services.face_service import face_service
 from app.services.queue import queue_stats, redis_conn
 from app.services.storage_service import public_base_var, storage
+from app.services.usage import backfill_photo_sizes
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger(__name__)
+
+
+def _backfill_sizes() -> None:
+    try:
+        backfill_photo_sizes()
+    except Exception:  # noqa: BLE001 - album sizes stay low until the next start; nothing else depends on it
+        log.exception("Could not count the storage of existing photos")
 
 
 @asynccontextmanager
@@ -26,6 +34,7 @@ async def lifespan(_: FastAPI):
         storage.ensure_bucket()
     # Warm the model in the background so /health answers immediately on first boot (download ~300 MB).
     threading.Thread(target=face_service.load, daemon=True).start()
+    threading.Thread(target=_backfill_sizes, daemon=True).start()
     yield
 
 

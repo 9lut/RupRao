@@ -14,24 +14,26 @@ from typing import Literal
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, select, true
 from sqlalchemy.orm import Session
 
 from app.api.serializers import effective_threshold, event_admin_out, photo_out
 from app.config import settings
 from app.db.database import get_db
 from app.db.models import (
-    Event, Face, Photo, PhotoStatus, RemovalRequest, RemovalStatus, User, new_share_token,
+    Event, EventVisitor, Face, Photo, PhotoStatus, RemovalRequest, RemovalStatus, User, new_share_token,
 )
 from app.schemas.common import (
     EventAdminOut, EventCreate, EventUpdate, PhotoIds, PhotoOut, RemovalOut, UploadError, UploadResult,
 )
-from app.services.auth import Principal, require_admin
+from app.services.auth import Principal, require_admin, require_superadmin
 from app.services.calibration import calibrate
 from app.services.image_service import ImageValidationError, process_banner, process_favicon, process_logo, process_upload
 from app.services.queue import enqueue_photos, queue_stats
 from app.services.retention import delete_event, delete_photos
 from app.services.storage_service import event_prefix, photo_keys, storage
+from app.services.usage import GB, disk_usage, lock_quota, upload_block
+from app.services.visitors import visitor_totals
 from app.services.zip_service import build_zip
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
@@ -78,6 +80,7 @@ def stats(db: Session = Depends(get_db), me: Principal = Depends(require_admin))
         queue = queue_stats() if me.is_super else None  # the queue is shared by everyone
     except Exception:  # noqa: BLE001
         queue = None
+    owner = db.get(User, me.user_id) if me.user_id else None
     return {
         "events": db.scalar(scoped(select(func.count(Event.id)), me)),
         "photos": sum(by_status.values()),
@@ -89,6 +92,91 @@ def stats(db: Session = Depends(get_db), me: Principal = Depends(require_admin))
             )
         ),
         "queue": queue,
+        "storage_bytes": db.scalar(
+            select(func.coalesce(func.sum(Photo.size_bytes), 0)).where(Photo.event_id.in_(event_ids))
+        ),
+        "storage_quota_bytes": owner.storage_quota_bytes if owner else None,
+        "disk": disk_usage() if me.is_super else None,  # the server's disk is not an organizer's business
+        **visitor_totals(db, EventVisitor.event_id.in_(event_ids)),
+    }
+
+
+@router.get("/system", dependencies=[Depends(require_superadmin)])
+def system_overview(db: Session = Depends(get_db)):
+    """The whole system at a glance. Super admins only; organizers get /stats, limited to their events."""
+    per_event = (
+        select(
+            Photo.event_id.label("event_id"),
+            func.count().label("photos"),
+            func.coalesce(func.sum(Photo.size_bytes), 0).label("bytes"),
+        )
+        .group_by(Photo.event_id)
+        .subquery()
+    )
+    people = (
+        select(
+            EventVisitor.event_id.label("event_id"),
+            func.count().label("visitors"),
+            func.count().filter(EventVisitor.scan_count > 0).label("scan_people"),
+            func.count().filter(EventVisitor.download_count > 0).label("download_people"),
+        )
+        .group_by(EventVisitor.event_id)
+        .subquery()
+    )
+    events = db.execute(
+        select(
+            Event.id, Event.name, Event.owner_id, Event.storage_quota_bytes,
+            func.coalesce(per_event.c.photos, 0).label("photos"),
+            func.coalesce(per_event.c.bytes, 0).label("bytes"),
+            func.coalesce(people.c.visitors, 0).label("visitors"),
+            func.coalesce(people.c.scan_people, 0).label("scan_people"),
+            func.coalesce(people.c.download_people, 0).label("download_people"),
+        )
+        .outerjoin(per_event, per_event.c.event_id == Event.id)
+        .outerjoin(people, people.c.event_id == Event.id)
+        .order_by(func.coalesce(per_event.c.bytes, 0).desc(), Event.created_at.desc())
+    ).all()
+
+    # None = events with no owner, which only super admins manage.
+    fields = ("photos", "bytes", "visitors", "scan_people", "download_people")
+    empty = {"events": 0, **dict.fromkeys(fields, 0)}
+    totals: dict[uuid.UUID | None, dict] = {}
+    for e in events:
+        t = totals.setdefault(e.owner_id, dict(empty))
+        t["events"] += 1
+        for field in fields:
+            t[field] += getattr(e, field)
+
+    accounts = db.scalars(select(User)).all()
+    owners = [
+        {"id": u.id, "name": u.display_name or u.username, "username": u.username, "active": u.active,
+         "quota_bytes": u.storage_quota_bytes, **totals.get(u.id, empty)}
+        for u in accounts
+    ]
+    if None in totals:
+        owners.append({"id": None, "name": "แอดมินใหญ่ (ไม่มีผู้จัด)", "username": None, "active": True, "quota_bytes": None, **totals[None]})
+    owners.sort(key=lambda o: o["bytes"], reverse=True)
+
+    try:
+        queue = queue_stats()
+    except Exception:  # noqa: BLE001
+        queue = None
+    return {
+        "disk": disk_usage(),
+        "min_free_bytes": int(settings.storage_min_free_gb * GB),
+        "photos_bytes": sum(e.bytes for e in events),
+        "events": len(events),
+        "photos": sum(e.photos for e in events),
+        "faces": db.scalar(select(func.count(Face.id))),
+        "accounts": len(accounts),
+        "queue": queue,
+        **visitor_totals(db, true()),
+        "owners": owners,
+        "top_events": [
+            {"id": e.id, "name": e.name, "photos": e.photos, "bytes": e.bytes, "quota_bytes": e.storage_quota_bytes,
+             "visitors": e.visitors, "scan_people": e.scan_people, "download_people": e.download_people}
+            for e in events[:20]
+        ],
     }
 
 
@@ -144,6 +232,8 @@ def update_event(event_id: uuid.UUID, body: EventUpdate, db: Session = Depends(g
             if not me.is_super:
                 raise HTTPException(status.HTTP_403_FORBIDDEN, "เฉพาะแอดมินใหญ่เปลี่ยนเจ้าของอีเวนต์ได้")
             value = _owner_or_400(db, value)
+        if field == "storage_quota_bytes" and not me.is_super:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "เฉพาะแอดมินใหญ่จำกัดพื้นที่อัลบั้มได้")
         if field == "theme_custom":
             value = value.model_dump(exclude_none=True) if value else {}
         setattr(event, field, value)
@@ -235,7 +325,7 @@ async def upload_photos(
 ):
     """`phashes`: optional JSON list of 64-hex dHashes from the browser's pre-upload check, one per
     file in order. Exact duplicates of a photo already in the event are skipped."""
-    get_event_or_404(db, event_id, me)
+    event = get_event_or_404(db, event_id, me)
     if len(files) > settings.max_files_per_upload:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, f"อัปโหลดได้สูงสุด {settings.max_files_per_upload} ไฟล์ต่อครั้ง"
@@ -243,6 +333,7 @@ async def upload_photos(
 
     uploaded: list[Photo] = []
     errors: list[UploadError] = []
+    full = False
     limit = settings.max_upload_mb * 1024 * 1024
     hashes = _parse_phashes(phashes, len(files))
     seen = set(db.scalars(select(Photo.content_hash).where(Photo.event_id == event_id, Photo.content_hash.is_not(None))))
@@ -260,26 +351,41 @@ async def upload_photos(
             errors.append(UploadError(filename=filename, error=str(exc)))
             continue
 
+        size = len(image.original) + len(image.thumbnail)
+        block = upload_block(db, event, size)
+        db.rollback()  # no transaction open during the slow storage upload
+        if block:
+            errors.append(UploadError(filename=filename, error=block))
+            full = True
+            continue
+
         photo_id = uuid.uuid4()
         original_key, thumb_key = photo_keys(event_id, photo_id)
         await run_in_threadpool(storage.upload, original_key, image.original, "image/jpeg")
         await run_in_threadpool(storage.upload, thumb_key, image.thumbnail, "image/webp")
 
+        # Check again now that this upload can't race another one for the same space.
+        lock_quota(db, event)
+        block = upload_block(db, event, size)
+        if block:
+            db.rollback()
+            storage.delete(original_key, thumb_key)
+            errors.append(UploadError(filename=filename, error=block))
+            full = True
+            continue
         photo = Photo(
             id=photo_id, event_id=event_id, storage_key=original_key, thumbnail_key=thumb_key,
             original_filename=filename, mime_type="image/jpeg", width=image.width, height=image.height,
-            status=PhotoStatus.PENDING, content_hash=digest, phash=phash,
+            status=PhotoStatus.PENDING, content_hash=digest, phash=phash, size_bytes=size,
         )
         db.add(photo)
+        db.commit()
+        db.refresh(photo)  # load server-side defaults (created_at)
+        enqueue_photos([photo.id])
         uploaded.append(photo)
         seen.add(digest)
 
-    db.commit()
-    for photo in uploaded:
-        db.refresh(photo)  # load server-side defaults (created_at)
-    if uploaded:
-        enqueue_photos([p.id for p in uploaded])
-    return UploadResult(uploaded=[photo_out(p) for p in uploaded], errors=errors)
+    return UploadResult(uploaded=[photo_out(p) for p in uploaded], errors=errors, storage_full=full)
 
 
 def _parse_phashes(raw: str | None, count: int) -> list[str | None]:

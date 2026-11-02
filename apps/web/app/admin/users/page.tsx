@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { useConfirm } from "@/components/Confirm";
 import Modal from "@/components/Modal";
+import { QuotaInput, StorageBar, UsageText } from "@/components/StorageBar";
 import { useAdminMe } from "@/lib/adminMe";
 import { adminApi, type AdminUser, type Role } from "@/lib/api";
+import { fmtBytes, gbToQuota, quotaToGb } from "@/lib/bytes";
 
 const inputCls = "w-full rounded-2xl bg-soft px-4 py-2.5 text-sm outline-none ring-ink/10 transition focus:bg-white focus:ring-2";
 
@@ -29,6 +31,7 @@ export default function UsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [resetFor, setResetFor] = useState<AdminUser | null>(null);
+  const [quotaFor, setQuotaFor] = useState<AdminUser | null>(null);
   // Shown once after create / reset so the super admin can pass it on.
   const [credentials, setCredentials] = useState<{ username: string; password: string } | null>(null);
 
@@ -141,8 +144,11 @@ export default function UsersPage() {
                     {!u.active && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] text-red-600">ปิดอยู่</span>}
                   </p>
                   <p className="mt-0.5 text-xs text-muted">
-                    <span className="font-mono">{u.username}</span> · {u.event_count} อีเวนต์ · เข้าระบบล่าสุด {fmt(u.last_login_at)}
+                    <span className="font-mono">{u.username}</span> · {u.event_count} อีเวนต์ · พื้นที่{" "}
+                    <UsageText used={u.storage_bytes} limit={u.storage_quota_bytes} />
+                    {u.storage_quota_bytes === null && " (ไม่จำกัด)"} · เข้าระบบล่าสุด {fmt(u.last_login_at)}
                   </p>
+                  <StorageBar used={u.storage_bytes} limit={u.storage_quota_bytes} className="mt-1.5 max-w-xs" />
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 text-xs">
                   <select
@@ -154,6 +160,9 @@ export default function UsersPage() {
                     <option value="organizer">ผู้จัดอีเวนต์</option>
                     <option value="superadmin">แอดมินใหญ่</option>
                   </select>
+                  <button onClick={() => setQuotaFor(u)} className="rounded-full border border-line px-3 py-1.5 hover:bg-soft">
+                    จำกัดพื้นที่
+                  </button>
                   <button onClick={() => setResetFor(u)} className="rounded-full border border-line px-3 py-1.5 hover:bg-soft">
                     รีเซ็ตรหัสผ่าน
                   </button>
@@ -190,8 +199,52 @@ export default function UsersPage() {
           }}
         />
       )}
+      {quotaFor && (
+        <SetQuota
+          user={quotaFor}
+          onClose={() => setQuotaFor(null)}
+          onDone={() => {
+            setQuotaFor(null);
+            load();
+          }}
+        />
+      )}
       {credentials && <CredentialsCard {...credentials} onClose={() => setCredentials(null)} />}
     </div>
+  );
+}
+
+function SetQuota({ user, onClose, onDone }: { user: AdminUser; onClose: () => void; onDone: () => void }) {
+  const [gb, setGb] = useState(quotaToGb(user.storage_quota_bytes));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <Modal title={`จำกัดพื้นที่ ${user.display_name || user.username}`} onClose={onClose}>
+      <form
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setBusy(true);
+          setError(null);
+          try {
+            await adminApi.updateUser(user.id, { storage_quota_bytes: gbToQuota(gb) });
+            onDone();
+          } catch (err) {
+            setError(err instanceof Error ? err.message : "บันทึกไม่สำเร็จ");
+            setBusy(false);
+          }
+        }}
+        className="space-y-4"
+      >
+        <QuotaInput value={gb} onChange={setGb} className={inputCls} />
+        <p className="text-xs text-muted">
+          รวมทุกอีเวนต์ของบัญชีนี้ · ตอนนี้ใช้ไป {fmtBytes(user.storage_bytes)} · เว้นว่าง = ไม่จำกัด · เต็มแล้วจะอัปโหลดเพิ่มไม่ได้ แต่รูปเดิมยังอยู่ครบ
+        </p>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <button disabled={busy} className="w-full rounded-full bg-ink py-2.5 text-sm font-medium text-white disabled:opacity-40">
+          {busy ? "กำลังบันทึก…" : "บันทึก"}
+        </button>
+      </form>
+    </Modal>
   );
 }
 
@@ -200,6 +253,7 @@ function CreateUser({ onClose, onCreated }: { onClose: () => void; onCreated: (u
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState(randomPassword);
   const [role, setRole] = useState<Role>("organizer");
+  const [quota, setQuota] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -208,7 +262,7 @@ function CreateUser({ onClose, onCreated }: { onClose: () => void; onCreated: (u
     setBusy(true);
     setError(null);
     try {
-      await adminApi.createUser({ username: username.trim(), password, display_name: displayName.trim() || null, role });
+      await adminApi.createUser({ username: username.trim(), password, display_name: displayName.trim() || null, role, storage_quota_bytes: gbToQuota(quota) });
       onCreated(username.trim(), password);
     } catch (err) {
       setError(err instanceof Error ? err.message : "สร้างไม่สำเร็จ");
@@ -262,6 +316,13 @@ function CreateUser({ onClose, onCreated }: { onClose: () => void; onCreated: (u
               </button>
             ))}
           </div>
+        </div>
+        <div>
+          <span className="text-sm font-medium">จำกัดพื้นที่รวม</span>
+          <div className="mt-2">
+            <QuotaInput value={quota} onChange={setQuota} className={inputCls} />
+          </div>
+          <span className="mt-1 block text-xs text-muted">รวมทุกอีเวนต์ของบัญชีนี้ · เว้นว่าง = ไม่จำกัด · แก้ทีหลังได้</span>
         </div>
         {error && <p className="text-sm text-red-600">{error}</p>}
         <button disabled={busy || username.trim().length < 3 || password.length < 8} className="w-full rounded-full bg-ink py-2.5 text-sm font-medium text-white disabled:opacity-40">

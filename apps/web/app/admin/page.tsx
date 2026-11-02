@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { StorageBar, UsageText, usageTone } from "@/components/StorageBar";
 import { useAdminMe } from "@/lib/adminMe";
 import { adminApi, type AdminEvent, type AdminStats } from "@/lib/api";
+import { fmtBytes } from "@/lib/bytes";
 
 type Filter = "all" | "attention" | "scanning" | "expiring" | "locked" | "keep";
-type Sort = "newest" | "oldest" | "name" | "photos" | "expiry";
+type Sort = "newest" | "oldest" | "name" | "photos" | "storage" | "expiry";
 type View = "grid" | "list";
 
 const DAY = 86_400_000;
@@ -26,6 +28,7 @@ const SORTS: { key: Sort; label: string; cmp: (a: AdminEvent, b: AdminEvent) => 
   { key: "oldest", label: "สร้างเก่าสุด", cmp: (a, b) => a.created_at.localeCompare(b.created_at) },
   { key: "name", label: "ชื่อ ก–ฮ", cmp: (a, b) => a.name.localeCompare(b.name, "th") },
   { key: "photos", label: "รูปมากสุด", cmp: (a, b) => b.photo_count - a.photo_count },
+  { key: "storage", label: "ใช้พื้นที่มากสุด", cmp: (a, b) => b.storage_bytes - a.storage_bytes },
   {
     key: "expiry",
     label: "ใกล้ลบก่อน",
@@ -50,6 +53,7 @@ export default function AdminHomePage() {
 }
 
 function AdminHome() {
+  const me = useAdminMe();
   const router = useRouter();
   const params = useSearchParams();
   const [events, setEvents] = useState<AdminEvent[] | null>(null);
@@ -125,9 +129,16 @@ function AdminHome() {
           <h1 className="text-2xl font-semibold tracking-tight">อีเวนต์ของคุณ</h1>
           <p className="mt-1 text-sm text-muted">จัดการรูป แชร์ลิงก์ / QR และดูแลคำขอลบรูปของผู้ร่วมงาน</p>
         </div>
-        <Link href="/admin/events/new" className="inline-flex items-center gap-2 rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white transition hover:bg-black/80">
-          <span className="text-base leading-none">+</span> สร้างอีเวนต์
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/admin/events/new" className="inline-flex items-center gap-2 rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white transition hover:bg-black/80">
+            <span className="text-base leading-none">+</span> สร้างอีเวนต์
+          </Link>
+          {me?.role === "superadmin" && (
+            <Link href="/admin/system" className="rounded-full border border-line px-4 py-2.5 text-sm text-muted transition hover:text-ink sm:hidden">
+              ภาพรวมระบบ
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* ---------- stats ---------- */}
@@ -142,6 +153,12 @@ function AdminHome() {
           hint={stats?.queue ? `คิว ${stats.queue.queued} · ล้มเหลว ${stats.queue.failed}` : stats ? "คิวไม่พร้อม" : undefined}
         />
         <Stat label="คำขอลบรอตรวจ" value={stats?.pending_removals} warn={(stats?.pending_removals ?? 0) > 0} />
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StorageCard stats={stats} />
+        <Stat label="คนเข้าดู" value={stats?.visitors} />
+        <Stat label="คนสแกนหน้า" value={stats?.scan_people} hint={stats ? `รวม ${stats.scans.toLocaleString()} ครั้ง` : undefined} />
+        <Stat label="คนดาวน์โหลด" value={stats?.download_people} hint={stats ? `รวม ${stats.downloads.toLocaleString()} รูป` : undefined} />
       </div>
 
       {/* ---------- needs attention ---------- */}
@@ -253,6 +270,8 @@ function AdminHome() {
                 <th className="px-4 py-3 font-medium">อีเวนต์</th>
                 <th className="px-4 py-3 text-right font-medium">รูป</th>
                 <th className="px-4 py-3 text-right font-medium">ใบหน้า</th>
+                <th className="px-4 py-3 text-right font-medium">พื้นที่</th>
+                <th className="px-4 py-3 text-right font-medium">เข้าดู / สแกน / โหลด (คน)</th>
                 <th className="px-4 py-3 font-medium">สถานะ</th>
                 <th className="px-4 py-3 font-medium">ลบอัตโนมัติ</th>
                 <th className="px-4 py-3" />
@@ -275,6 +294,12 @@ function AdminHome() {
                   </td>
                   <td className="hidden px-4 py-3 text-right tabular-nums sm:table-cell">{ev.photo_count.toLocaleString()}</td>
                   <td className="hidden px-4 py-3 text-right tabular-nums sm:table-cell">{ev.face_count.toLocaleString()}</td>
+                  <td className="hidden whitespace-nowrap px-4 py-3 text-right tabular-nums sm:table-cell">
+                    <UsageText used={ev.storage_bytes} limit={ev.storage_quota_bytes} />
+                  </td>
+                  <td className="hidden whitespace-nowrap px-4 py-3 text-right tabular-nums sm:table-cell">
+                    {ev.visitors.toLocaleString()} / {ev.scan_people.toLocaleString()} / {ev.download_people.toLocaleString()}
+                  </td>
                   <td className="hidden px-4 py-3 sm:table-cell">
                     <Badges ev={ev} />
                   </td>
@@ -324,6 +349,11 @@ function EventCard({ ev, copied, onCopy }: { ev: AdminEvent; copied: boolean; on
           <p className="mt-0.5 text-xs text-muted">
             {ev.photo_count.toLocaleString()} รูป · {ev.face_count.toLocaleString()} ใบหน้า · <Expiry ev={ev} />
           </p>
+          <p className="mt-0.5 text-xs text-muted">
+            <UsageText used={ev.storage_bytes} limit={ev.storage_quota_bytes} /> · เข้าดู {ev.visitors.toLocaleString()} · สแกน {ev.scan_people.toLocaleString()} · โหลด{" "}
+            {ev.download_people.toLocaleString()} คน
+          </p>
+          <StorageBar used={ev.storage_bytes} limit={ev.storage_quota_bytes} className="mt-1.5" />
         </Link>
         <button onClick={onCopy} className="shrink-0 rounded-full border border-line px-3 py-1.5 text-xs text-muted transition hover:text-ink">
           {copied ? "คัดลอกแล้ว ✓" : "คัดลอกลิงก์"}
@@ -367,6 +397,36 @@ function Stat({ label, value, hint, live, warn }: { label: string; value?: numbe
       </p>
       {value === undefined ? <div className="shimmer mt-2 h-6 w-12 rounded-md" /> : <p className="mt-1 text-xl font-semibold tabular-nums">{value.toLocaleString()}</p>}
       {hint && <p className="mt-0.5 text-[11px] text-muted">{hint}</p>}
+    </div>
+  );
+}
+
+/** Super admins: how full the server is. Organizers: their own usage against their limit. */
+function StorageCard({ stats }: { stats: AdminStats | null }) {
+  if (!stats) return <Stat label="พื้นที่" />;
+  if (stats.disk) {
+    const warn = usageTone(stats.disk.used, stats.disk.total) !== "ok";
+    return (
+      <Link href="/admin/system" className={`rounded-2xl border p-4 transition hover:border-ink/25 ${warn ? "border-amber-200 bg-amber-50/50" : "border-line"}`}>
+        <p className="text-xs text-muted">พื้นที่เซิร์ฟเวอร์ →</p>
+        <p className="mt-1 text-xl font-semibold tabular-nums">
+          <UsageText used={stats.disk.used} limit={stats.disk.total} />
+        </p>
+        <StorageBar used={stats.disk.used} limit={stats.disk.total} className="mt-2" />
+      </Link>
+    );
+  }
+  return (
+    <div className={`rounded-2xl border p-4 ${usageTone(stats.storage_bytes, stats.storage_quota_bytes) !== "ok" ? "border-amber-200 bg-amber-50/50" : "border-line"}`}>
+      <p className="text-xs text-muted">พื้นที่ที่ใช้</p>
+      <p className="mt-1 text-xl font-semibold tabular-nums">
+        <UsageText used={stats.storage_bytes} limit={stats.storage_quota_bytes} />
+      </p>
+      {stats.storage_quota_bytes === null ? (
+        <p className="mt-0.5 text-[11px] text-muted">{fmtBytes(stats.storage_bytes)} จากทุกอีเวนต์</p>
+      ) : (
+        <StorageBar used={stats.storage_bytes} limit={stats.storage_quota_bytes} className="mt-2" />
+      )}
     </div>
   );
 }

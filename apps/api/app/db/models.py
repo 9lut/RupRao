@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import BigInteger, Boolean, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -40,6 +40,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(Text)
     role: Mapped[str] = mapped_column(String(20), default=Role.ORGANIZER)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    storage_quota_bytes: Mapped[int | None] = mapped_column(BigInteger)  # None = unlimited
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     last_login_at: Mapped[datetime | None] = mapped_column()
 
@@ -67,6 +68,7 @@ class Event(Base):
     logo_key: Mapped[str | None] = mapped_column(Text)
     favicon_key: Mapped[str | None] = mapped_column(Text)
     owner_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    storage_quota_bytes: Mapped[int | None] = mapped_column(BigInteger)  # None = unlimited
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
 
@@ -89,6 +91,7 @@ class Photo(Base):
     error: Mapped[str | None] = mapped_column(Text)
     content_hash: Mapped[str | None] = mapped_column(String(64))  # SHA-256 of the uploaded file
     phash: Mapped[str | None] = mapped_column(String(64))  # browser 256-bit dHash, for near-duplicates
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger)  # original + thumbnail in storage
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     event: Mapped[Event] = relationship(back_populates="photos")
@@ -109,6 +112,17 @@ class Face(Base):
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     photo: Mapped[Photo] = relationship(back_populates="faces")
+
+
+class EventVisitor(Base):
+    """One anonymous browser on one event (see services/visitors.py)."""
+
+    __tablename__ = "event_visitors"
+
+    event_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), primary_key=True)
+    visitor: Mapped[str] = mapped_column(String(64), primary_key=True)
+    scan_count: Mapped[int] = mapped_column(Integer, default=0)
+    download_count: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class RemovalRequest(Base):

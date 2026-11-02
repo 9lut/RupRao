@@ -2,9 +2,10 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.db.models import Event, Photo, PhotoStatus, RemovalRequest, RemovalStatus, User
+from app.db.models import Event, EventVisitor, Photo, PhotoStatus, RemovalRequest, RemovalStatus, User
 from app.schemas.common import EventAdminOut, PhotoOut, PublicPhotoOut
 from app.services.storage_service import storage
+from app.services.visitors import visitor_totals
 
 
 def _urls(photo: Photo) -> dict:
@@ -48,12 +49,13 @@ def effective_threshold(event: Event) -> float:
 
 def event_admin_out(db: Session, event: Event) -> EventAdminOut:
     unfinished = Photo.status.in_([PhotoStatus.PENDING, PhotoStatus.PROCESSING])
-    photo_count, face_count, pending, failed = db.execute(
+    photo_count, face_count, pending, failed, storage_bytes = db.execute(
         select(
             func.count(Photo.id),
             func.coalesce(func.sum(Photo.face_count), 0),
             func.coalesce(func.sum(case((unfinished, 1), else_=0)), 0),
             func.coalesce(func.sum(case((Photo.status == PhotoStatus.FAILED, 1), else_=0)), 0),
+            func.coalesce(func.sum(Photo.size_bytes), 0),
         ).where(Photo.event_id == event.id)
     ).one()
     removals = db.scalar(
@@ -91,4 +93,7 @@ def event_admin_out(db: Session, event: Event) -> EventAdminOut:
         failed_count=failed,
         pending_removals=removals or 0,
         cover_url=storage.get_url(cover_key) if cover_key else None,
+        storage_bytes=storage_bytes,
+        storage_quota_bytes=event.storage_quota_bytes,
+        **visitor_totals(db, EventVisitor.event_id == event.id),
     )

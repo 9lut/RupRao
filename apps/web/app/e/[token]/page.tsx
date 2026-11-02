@@ -112,6 +112,7 @@ export default function EventPage({ params }: { params: Promise<{ token: string 
       .getEvent(token)
       .then((ev) => {
         setEvent(ev);
+        publicApi.visit(token).catch(() => {});
         const saved = sessionStore.get(`ruprao_code_${token}`);
         if (!ev.requires_code) setUnlocked(true);
         else if (saved) {
