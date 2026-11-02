@@ -7,7 +7,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -19,10 +19,12 @@ from app.schemas.common import (
     EventPublicOut, FaceBox, PhotoIds, PublicPhotoOut, PublicPhotoPage, RemovalCreate, SearchMatch, SearchResult,
 )
 from app.services import rate_limit
+from app.services.auth import sign_value
 from app.services.face_service import face_service
 from app.services.image_service import ImageValidationError, load_image, to_bgr_array
 from app.services.search_service import search_event
 from app.services.storage_service import storage
+from app.services.watermark import apply_watermark, watermark_options
 from app.services.zip_service import build_zip
 
 router = APIRouter(prefix="/public", tags=["public"])
@@ -66,6 +68,11 @@ def get_event(token: str, db: Session = Depends(get_db)):
         photo_count=count or 0,
         threshold=effective_threshold(event),
         public_album=event.public_album,
+        theme=event.theme,
+        theme_custom=event.theme_custom or {},
+        banner_url=storage.get_url(event.banner_key) if event.banner_key else None,
+        logo_url=storage.get_url(event.logo_key) if event.logo_key else None,
+        favicon_url=storage.get_url(event.favicon_key) if event.favicon_key else None,
     )
 
 
@@ -151,7 +158,31 @@ def download_url(photo_id: uuid.UUID, event: Event = Depends(accessible_event), 
     photos = _photos_in_event(db, event, [photo_id])
     if not photos:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "ไม่พบรูปภาพ")
-    return {"url": storage.get_url(photos[0].storage_key, download_name=f"photo-{str(photo_id)[:8]}.jpg")}
+    name = f"photo-{str(photo_id)[:8]}.jpg"
+    if watermark_options(event) is None:
+        return {"url": storage.get_url(photos[0].storage_key, download_name=name)}
+    # Watermarked copies are made on the fly; hand out a short-lived signed link to this API.
+    exp = int(time.time()) + 300
+    sig = sign_value("file", f"{photo_id}:{exp}")
+    return {"url": f"{settings.api_root_path}/public/files/{photo_id}?exp={exp}&sig={sig}"}
+
+
+@router.get("/files/{photo_id}")
+def download_file(photo_id: uuid.UUID, exp: int, sig: str, db: Session = Depends(get_db)):
+    """A single watermarked photo, reached through the signed link from download_url."""
+    if exp < time.time() or not hmac.compare_digest(sig, sign_value("file", f"{photo_id}:{exp}")):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "ลิงก์ดาวน์โหลดหมดอายุ ลองกดดาวน์โหลดอีกครั้ง")
+    photo = db.get(Photo, photo_id)
+    if photo is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "ไม่พบรูปภาพ")
+    _event_by_token(db, photo.event.share_token)  # still live (not expired)
+    data = storage.download(photo.storage_key)
+    opts = watermark_options(photo.event)
+    return Response(
+        apply_watermark(data, opts) if opts else data,
+        media_type="image/jpeg",
+        headers={"Content-Disposition": f'attachment; filename="photo-{str(photo_id)[:8]}.jpg"', "Cache-Control": "private, no-store"},
+    )
 
 
 @router.post("/events/{token}/download")
@@ -162,8 +193,9 @@ def download_zip(
     photos = _photos_in_event(db, event, body.photo_ids[: settings.max_zip_photos])
     if not photos:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "ไม่พบรูปภาพ")
+    opts = watermark_options(event)
     return StreamingResponse(
-        build_zip(photos),
+        build_zip(photos, (lambda data: apply_watermark(data, opts)) if opts else None),
         media_type="application/zip",
         headers={"Content-Disposition": 'attachment; filename="my-photos.zip"'},
     )

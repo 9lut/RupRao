@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { adminApi, type AdminEvent, type Calibration } from "@/lib/api";
+import { asTheme, type ThemeCustom, type ThemeKey } from "@/lib/themes";
 import { useConfirm } from "./Confirm";
+import OwnerSelect from "./OwnerSelect";
+import ThemeEditor from "./ThemeEditor";
 
 const inputCls =
   "w-full rounded-2xl bg-soft px-4 py-2.5 text-sm outline-none ring-ink/10 transition focus:bg-white focus:ring-2";
@@ -21,6 +24,23 @@ export default function EventSettings({ event, onSaved }: { event: AdminEvent; o
   const [threshold, setThreshold] = useState(Math.round(event.effective_threshold * 100));
   const [expires, setExpires] = useState(toDateInput(event.expires_at));
   const [album, setAlbum] = useState(event.public_album);
+  const [ownerId, setOwnerId] = useState<string | null>(event.owner_id);
+  const [theme, setTheme] = useState<ThemeKey>(asTheme(event.theme));
+  const [themeCustom, setThemeCustom] = useState<ThemeCustom>(event.theme_custom ?? {});
+  // Banner / logo picked in the editor stay local until "บันทึก", then upload (or get removed).
+  const [bannerPick, setBannerPick] = useState<Pick>(null);
+  const [logoPick, setLogoPick] = useState<Pick>(null);
+  const [faviconPick, setFaviconPick] = useState<Pick>(null);
+  const urls = useRef(new Set<string>());
+  useEffect(() => {
+    const live = urls.current;
+    return () => live.forEach((u) => URL.revokeObjectURL(u));
+  }, []);
+  const pickFile = (file: File): Pick => {
+    const url = URL.createObjectURL(file);
+    urls.current.add(url);
+    return { file, url };
+  };
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [calib, setCalib] = useState<Calibration | null>(null);
@@ -69,6 +89,10 @@ export default function EventSettings({ event, onSaved }: { event: AdminEvent; o
     setSaving(true);
     setMessage(null);
     try {
+      for (const [asset, pick] of [["banner", bannerPick], ["logo", logoPick], ["favicon", faviconPick]] as const) {
+        if (pick === "remove") await adminApi.removeAsset(event.id, asset);
+        else if (pick) await adminApi.uploadAsset(event.id, asset, pick.file);
+      }
       const updated = await adminApi.updateEvent(event.id, {
         name: name.trim(),
         description: description.trim() || null,
@@ -77,8 +101,16 @@ export default function EventSettings({ event, onSaved }: { event: AdminEvent; o
         // End of the chosen local day.
         expires_at: expires ? new Date(`${expires}T23:59:59`).toISOString() : null,
         public_album: album,
+        theme,
+        // Half-filled link rows are dropped rather than failing the whole save.
+        theme_custom: { ...themeCustom, links: filledLinks(themeCustom) },
+        // Only super admins may change it (the API refuses otherwise), so only send real changes.
+        ...(ownerId !== event.owner_id ? { owner_id: ownerId } : {}),
       });
       onSaved(updated);
+      setBannerPick(null);
+      setLogoPick(null);
+      setFaviconPick(null);
       setMessage({ ok: true, text: "บันทึกแล้ว" });
     } catch (err) {
       setMessage({ ok: false, text: err instanceof Error ? err.message : "บันทึกไม่สำเร็จ" });
@@ -119,12 +151,13 @@ export default function EventSettings({ event, onSaved }: { event: AdminEvent; o
           />
         </Field>
         <label className="flex items-start gap-3 rounded-2xl border border-line p-4 text-sm">
-          <input type="checkbox" checked={album} onChange={(e) => setAlbum(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[#0a0a0a]" />
+          <input type="checkbox" checked={album} onChange={(e) => setAlbum(e.target.checked)} className="mt-0.5 h-4 w-4 accent-ink" />
           <span>
             <span className="font-medium">เปิดอัลบั้มให้ผู้ร่วมงานดูทั้งหมด</span>
             <span className="mt-0.5 block text-xs text-muted">ปิดไว้ = ผู้ร่วมงานเห็นเฉพาะรูปที่มีใบหน้าตัวเอง (แนะนำเพื่อความเป็นส่วนตัว)</span>
           </span>
         </label>
+        <OwnerSelect value={ownerId} onChange={setOwnerId} />
         <Field label="วันที่ลบข้อมูลอัตโนมัติ" hint="เมื่อถึงวันนี้ รูปและข้อมูลใบหน้าทั้งหมดของอีเวนต์จะถูกลบถาวร เว้นว่าง = ไม่ลบอัตโนมัติ">
           <div className="flex gap-2">
             <input type="date" value={expires} onChange={(e) => setExpires(e.target.value)} className={inputCls} />
@@ -210,10 +243,47 @@ export default function EventSettings({ event, onSaved }: { event: AdminEvent; o
           )}
         </div>
 
-        <div className="flex items-center gap-3 pt-2">
+      </div>
+
+      <div className="border-t border-line pt-8 lg:col-span-2">
+        <ThemeEditor
+          event={event}
+          theme={theme}
+          custom={themeCustom}
+          onCustom={setThemeCustom}
+          onReset={() => {
+            setTheme("default");
+            setThemeCustom({});
+            setBannerPick(event.banner_url ? "remove" : null);
+            setLogoPick(event.logo_url ? "remove" : null);
+            setFaviconPick(event.favicon_url ? "remove" : null);
+          }}
+          bannerSrc={srcOf(bannerPick, event.banner_url)}
+          bannerPending={bannerPick !== null}
+          onPickBanner={(f) => {
+            setBannerPick(pickFile(f));
+            // A new photo starts centered.
+            const rest = { ...themeCustom };
+            for (const k of ["banner_x", "banner_y", "banner_zoom", "banner_position"] as const) delete rest[k];
+            setThemeCustom(rest);
+          }}
+          onRemoveBanner={() => setBannerPick(event.banner_url ? "remove" : null)}
+          logoSrc={srcOf(logoPick, event.logo_url)}
+          logoPending={logoPick !== null}
+          onPickLogo={(f) => setLogoPick(pickFile(f))}
+          onRemoveLogo={() => setLogoPick(event.logo_url ? "remove" : null)}
+          faviconSrc={srcOf(faviconPick, event.favicon_url)}
+          faviconPending={faviconPick !== null}
+          onPickFavicon={(f) => setFaviconPick(pickFile(f))}
+          onRemoveFavicon={() => setFaviconPick(event.favicon_url ? "remove" : null)}
+        />
+      </div>
+
+      <div className="sticky bottom-0 z-10 -mx-4 border-t border-line bg-white/90 px-4 py-3 backdrop-blur lg:col-span-2">
+        <div className="flex items-center gap-3">
           <button
             disabled={saving}
-            className="rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white transition hover:bg-black/80 disabled:opacity-50"
+            className="rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white transition hover:bg-ink/85 disabled:opacity-50"
           >
             {saving ? "กำลังบันทึก…" : "บันทึกการตั้งค่า"}
           </button>
@@ -222,6 +292,17 @@ export default function EventSettings({ event, onSaved }: { event: AdminEvent; o
       </div>
     </form>
   );
+}
+
+type Pick = { file: File; url: string } | "remove" | null;
+
+function filledLinks(custom: ThemeCustom) {
+  const links = custom.links?.filter((l) => l.url);
+  return links?.length ? links : undefined;
+}
+
+function srcOf(pick: Pick, saved: string | null): string | null {
+  return pick === "remove" ? null : pick ? pick.url : saved;
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {

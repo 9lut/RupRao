@@ -120,7 +120,7 @@ function ConfirmDialog({ opts, onClose }: { opts: ConfirmOptions; onClose: (ok: 
             disabled={blocked}
             onClick={() => onClose(true)}
             className={`flex-1 rounded-full py-2.5 text-sm font-medium text-white transition disabled:opacity-30 ${
-              danger ? "bg-red-600 hover:bg-red-700" : "bg-ink hover:bg-black/80"
+              danger ? "bg-red-600 hover:bg-red-700" : "bg-ink hover:bg-ink/85"
             }`}
           >
             {opts.confirmLabel ?? "ยืนยัน"}

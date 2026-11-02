@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { setAdminMe } from "@/lib/adminMe";
 import { adminApi, session } from "@/lib/api";
 
 /** Client-side guard; the API enforces auth on every admin request regardless. */
@@ -18,7 +19,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
     adminApi
       .me()
-      .then(() => setOk(true))
+      .then((me) => {
+        setAdminMe(me);
+        setOk(true);
+      })
       .catch(() => {}); // 401 → api client redirects to login
   }, [isLogin, pathname]);
 

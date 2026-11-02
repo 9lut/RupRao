@@ -1,0 +1,6 @@
+# The same app on another name (e.g. a sponsor's or an event's own subdomain). Copy to
+# second-event-domain.caddy and edit. Event links work on every name: /e/<code>.
+gf7.example.org {
+	tls {$CADDY_TLS:internal}
+	import app
+}

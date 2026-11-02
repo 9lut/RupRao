@@ -29,8 +29,12 @@ services:
       - "127.0.0.1:3000:8080"   # http://localhost:3000 -> Caddy (full app incl. /api)
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+      CADDY_TLS: ${CADDY_TLS:-internal}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-127.0.0.1/32}
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./infra/caddy/sites:/etc/caddy/sites:ro
+      - ./infra/caddy/certs:/etc/caddy/certs:ro
       - caddy-data:/data
       - caddy-config:/config
     depends_on:

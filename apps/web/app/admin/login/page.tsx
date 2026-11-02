@@ -15,7 +15,7 @@ export default function LoginPage() {
 
 function Login() {
   const params = useSearchParams();
-  const [username, setUsername] = useState("admin");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

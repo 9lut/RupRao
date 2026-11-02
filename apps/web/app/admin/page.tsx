@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useAdminMe } from "@/lib/adminMe";
 import { adminApi, type AdminEvent, type AdminStats } from "@/lib/api";
 
 type Filter = "all" | "attention" | "scanning" | "expiring" | "locked" | "keep";
@@ -333,8 +334,10 @@ function EventCard({ ev, copied, onCopy }: { ev: AdminEvent; copied: boolean; on
 }
 
 function Badges({ ev }: { ev: AdminEvent }) {
+  const me = useAdminMe();
   return (
     <span className="flex flex-wrap gap-1.5">
+      {me?.role === "superadmin" && <Badge>👤 {ev.owner_name ?? "แอดมินใหญ่"}</Badge>}
       {ev.pending_removals > 0 && <Badge tone="warn">คำขอลบ {ev.pending_removals}</Badge>}
       {ev.failed_count > 0 && <Badge tone="danger">ล้มเหลว {ev.failed_count}</Badge>}
       {ev.pending_count > 0 && <Badge>กำลังสแกน {ev.pending_count}</Badge>}

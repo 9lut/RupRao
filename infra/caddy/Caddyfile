@@ -4,9 +4,18 @@
 #   /storage/* -> MinIO (prefix stripped; presigned signatures stay valid because Host is preserved)
 #
 # SITE_ADDRESS can list several hosts, e.g. "localhost, 192.168.1.50" to open it from phones on
-# your Wi-Fi. `tls internal` = Caddy's own local CA (browsers warn until you trust it).
+# your Wi-Fi. CADDY_TLS=internal (default) = Caddy's own local CA (browsers warn until you trust it).
+# On a public server set CADDY_TLS to an e-mail address to get a real Let's Encrypt certificate
+# (needs ports 80/443 open and a public name, e.g. 34-87-12-34.sslip.io — see docs/deploy-gcp.md),
+# or to "/etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key" for a Cloudflare Origin Certificate.
 {
 	admin off
+	servers {
+		# Behind Cloudflare's proxy, set TRUSTED_PROXIES to Cloudflare's IP ranges so {client_ip}
+		# is the visitor (from CF-Connecting-IP) instead of a Cloudflare edge — rate limits need it.
+		trusted_proxies static {$TRUSTED_PROXIES:127.0.0.1/32}
+		client_ip_headers CF-Connecting-IP X-Forwarded-For
+	}
 }
 
 (app) {
@@ -17,7 +26,9 @@
 	}
 
 	handle_path /api/* {
-		reverse_proxy api:8000
+		reverse_proxy api:8000 {
+			header_up X-Real-IP {client_ip}
+		}
 	}
 
 	handle_path /storage/* {
@@ -37,7 +48,7 @@
 }
 
 {$SITE_ADDRESS:localhost} {
-	tls internal
+	tls {$CADDY_TLS:internal}
 	import app
 	header Strict-Transport-Security "max-age=31536000"
 }
@@ -47,3 +58,7 @@
 http://localhost:8080 {
 	import app
 }
+
+# Extra hostnames (subdomains, redirects, the MinIO console…): drop *.caddy files into
+# infra/caddy/sites/ — see the examples there and docs/deploy-gcp.md.
+import sites/*.caddy

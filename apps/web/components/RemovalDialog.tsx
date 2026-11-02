@@ -65,7 +65,7 @@ export default function RemovalDialog({
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button
             disabled={busy}
-            className="w-full rounded-full bg-ink py-2.5 text-sm font-medium text-white transition hover:bg-black/80 disabled:opacity-50"
+            className="w-full rounded-full bg-ink py-2.5 text-sm font-medium text-white transition hover:bg-ink/85 disabled:opacity-50"
           >
             {busy ? "กำลังส่ง…" : "ส่งคำขอลบ"}
           </button>

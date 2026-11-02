@@ -79,6 +79,9 @@ export default function ShareCard({ event, onRotate }: { event: AdminEvent; onRo
               ดาวน์โหลด QR
             </a>
           )}
+          <a href={`/admin/events/${event.id}/poster`} className="rounded-full bg-ink px-3 py-1.5 font-medium text-white hover:bg-ink/85">
+            พิมพ์โปสเตอร์ QR
+          </a>
           <a href={link} target="_blank" rel="noreferrer" className="rounded-full border border-line px-3 py-1.5 hover:bg-soft">
             เปิดหน้าค้นหา ↗
           </a>

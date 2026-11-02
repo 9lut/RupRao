@@ -22,3 +22,14 @@ def test_expired_rejected():
 def test_garbage_rejected():
     for bad in ("", "abc", "a.b", "....", "%%%.%%%"):
         assert verify_token(bad) is None
+
+
+def test_password_hash_roundtrip():
+    from app.services.auth import hash_password, verify_password
+
+    stored = hash_password("correct horse battery")
+    assert stored.startswith("scrypt$")
+    assert verify_password("correct horse battery", stored)
+    assert not verify_password("wrong", stored)
+    assert not verify_password("anything", "garbage")
+    assert hash_password("same") != hash_password("same")  # salted

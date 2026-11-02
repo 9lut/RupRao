@@ -1,0 +1,42 @@
+# Overrides for a single small cloud VM (GCP e2-medium, see docs/deploy-gcp.md).
+#   docker compose -f docker-compose.yml -f docker-compose.gcp.yml up -d --build
+name: ai-photo-finder
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }  # keep the 30 GB disk from filling with logs
+
+services:
+  caddy:
+    <<: *logging
+  web:
+    <<: *logging
+    mem_limit: 256m
+  api:
+    <<: *logging
+    mem_limit: 1400m
+    environment:
+      MODEL_DIR: /app/models
+      API_ROOT_PATH: /api
+      OMP_NUM_THREADS: "2"  # e2-medium has 2 vCPUs; avoid oversubscribing ONNX Runtime
+  worker:
+    <<: *logging
+    mem_limit: 1200m
+    restart: unless-stopped
+    environment:
+      MODEL_DIR: /app/models
+      OMP_NUM_THREADS: "2"
+  postgres:
+    <<: *logging
+    mem_limit: 384m
+    # Not reachable from the internet anyway (127.0.0.1); drop the host port on the VM.
+    ports: !reset []
+  redis:
+    <<: *logging
+    mem_limit: 128m
+    command: redis-server --appendonly yes --maxmemory 96mb --maxmemory-policy noeviction
+  minio:
+    <<: *logging
+    mem_limit: 384m
+    ports: !reset []

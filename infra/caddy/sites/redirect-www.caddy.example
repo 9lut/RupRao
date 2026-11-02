@@ -1,0 +1,6 @@
+# Send a second name to the main site, e.g. www → photos. Copy to redirect-www.caddy and edit.
+# The DNS A record for the name must point at the server, like the main one.
+www.photos.example.com {
+	tls {$CADDY_TLS:internal}
+	redir https://photos.example.com{uri} permanent
+}

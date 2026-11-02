@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.api import admin, auth, public
+from app.api import admin, auth, public, users
 from app.config import settings
 from app.db.database import engine
 from app.db.migrate import run_migrations
@@ -67,6 +67,7 @@ async def storage_public_base(request: Request, call_next):
 
 app.include_router(auth.router)
 app.include_router(admin.router)
+app.include_router(users.router)
 app.include_router(public.router)
 
 

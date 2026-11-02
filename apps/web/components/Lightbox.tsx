@@ -185,7 +185,7 @@ export default function Lightbox<T extends GalleryItem>({
         <button
           onClick={download}
           disabled={downloading}
-          className="whitespace-nowrap rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white transition hover:bg-black/80 disabled:opacity-50"
+          className="whitespace-nowrap rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white transition hover:bg-ink/85 disabled:opacity-50"
         >
           {downloading ? "กำลังเตรียม…" : "ดาวน์โหลด"}
         </button>

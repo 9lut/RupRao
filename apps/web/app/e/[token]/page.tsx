@@ -11,13 +11,18 @@ import Modal from "@/components/Modal";
 import NotFoundView from "@/components/NotFoundView";
 import RemovalDialog from "@/components/RemovalDialog";
 import SelectionBar from "@/components/SelectionBar";
+import { Announcement, EventLinks } from "@/components/EventExtras";
+import ThemeBanner, { useEventTheme } from "@/components/ThemeBanner";
 import {
   AlbumIcon, CameraIcon, FaceScanIcon, HeartIcon, HelpIcon, LockIcon, SearchIcon, SmileIcon,
 } from "@/components/icons";
 import { ScanCorners, ScanningMark } from "@/components/brand";
+import { useDocumentBrand, useProvideEventBrand } from "@/lib/eventBrand";
+import { asTheme, navOverlay, type ThemeCustom } from "@/lib/themes";
 import { ApiError, publicApi, type FaceBox, type Photo, type PublicEvent, type SearchResult } from "@/lib/api";
 
 const CONSENT_KEY = "ruprao_consent_v1";
+const NO_CUSTOM: ThemeCustom = {};
 
 function store(kind: "local" | "session") {
   return {
@@ -93,6 +98,12 @@ export default function EventPage({ params }: { params: Promise<{ token: string 
   const [error, setError] = useState<string | null>(null);
 
   const favorites = useFavorites(token);
+  const theme = asTheme(event?.theme);
+  const themeCustom = event?.theme_custom ?? NO_CUSTOM;
+  const themed = useEventTheme(theme, themeCustom, event?.banner_url);
+  const overlayNav = navOverlay(theme, themeCustom, event?.banner_url);
+  useProvideEventBrand(event?.logo_url, event?.name, overlayNav);
+  useDocumentBrand(event ? themeCustom.tab_title || event.name : undefined, event?.favicon_url ?? event?.logo_url);
   const [removal, setRemoval] = useState<{ ids: string[]; onSent?: () => void } | null>(null);
 
   useEffect(() => {
@@ -181,6 +192,16 @@ export default function EventPage({ params }: { params: Promise<{ token: string 
 
   return (
     <>
+      <ThemeBanner
+        theme={theme}
+        custom={themeCustom}
+        bannerUrl={event.banner_url}
+        logoUrl={event.logo_url}
+        underNav={overlayNav}
+        title={event.name}
+        subtitle={event.description}
+        photoCount={event.photo_count}
+      />
       <div className="mx-auto max-w-[1440px] px-4 pb-36 sm:px-6 lg:grid lg:grid-cols-[300px_minmax(0,1fr)] lg:gap-10 lg:px-8 lg:pb-20 xl:grid-cols-[320px_minmax(0,1fr)] xl:gap-14">
         {/* ---------- desktop sidebar ---------- */}
         <aside className="hidden lg:block">
@@ -199,7 +220,16 @@ export default function EventPage({ params }: { params: Promise<{ token: string 
 
         {/* ---------- main ---------- */}
         <div className="min-w-0">
-          <div className="pt-6 text-center lg:hidden">
+          {(themeCustom.announcement || themeCustom.announcement_title) && (
+            <Announcement title={themeCustom.announcement_title} text={themeCustom.announcement} className="mt-6 lg:mt-8" />
+          )}
+          {/* Without a banner the link buttons sit here instead. */}
+          {!themed && !!themeCustom.links?.length && (
+            <div className="mt-4">
+              <EventLinks links={themeCustom.links} />
+            </div>
+          )}
+          <div className={`pt-6 text-center lg:hidden ${themed ? "hidden" : ""}`}>
             <p className="text-xs text-muted">อีเวนต์</p>
             <h1 className="mt-1 text-lg font-semibold tracking-tight">{event.name}</h1>
           </div>
@@ -334,14 +364,14 @@ function Sidebar({
         <div className="mt-4 grid grid-cols-2 gap-2">
           <button
             onClick={onCamera}
-            className="flex flex-col items-center gap-1.5 rounded-2xl bg-ink px-2 py-3 text-xs font-medium text-white transition hover:bg-black/85"
+            className="flex flex-col items-center gap-1.5 rounded-2xl bg-ink px-2 py-3 text-xs font-medium text-white transition hover:bg-ink/85"
           >
             <CameraIcon size={20} />
             ถ่ายภาพใบหน้า
           </button>
           <button
             onClick={onFile}
-            className="flex flex-col items-center gap-1.5 rounded-2xl border border-line bg-white px-2 py-3 text-xs font-medium transition hover:border-[#cfcfcf]"
+            className="flex flex-col items-center gap-1.5 rounded-2xl border border-line bg-white px-2 py-3 text-xs font-medium transition hover:border-ink/25"
           >
             <SmileIcon size={20} />
             ใช้ภาพใบหน้า
@@ -431,14 +461,14 @@ function DesktopWelcome({
         <div className="mt-8 flex gap-3">
           <button
             onClick={onFile}
-            className="inline-flex items-center gap-2 rounded-full bg-ink px-6 py-3 text-sm font-medium text-white transition hover:bg-black/85"
+            className="inline-flex items-center gap-2 rounded-full bg-ink px-6 py-3 text-sm font-medium text-white transition hover:bg-ink/85"
           >
             <SmileIcon size={18} />
             เลือกรูปจากเครื่อง
           </button>
           <button
             onClick={onCamera}
-            className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-6 py-3 text-sm font-medium transition hover:border-[#cfcfcf]"
+            className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-6 py-3 text-sm font-medium transition hover:border-ink/25"
           >
             <CameraIcon size={18} />
             ใช้เว็บแคม
@@ -487,14 +517,14 @@ function Hero({
         <div className="mt-7 grid grid-cols-2 gap-3">
           <button
             onClick={onCamera}
-            className="flex flex-col items-center gap-2 rounded-2xl bg-ink px-3 py-4 text-sm font-medium text-white transition hover:bg-black/85 active:scale-[0.98]"
+            className="flex flex-col items-center gap-2 rounded-2xl bg-ink px-3 py-4 text-sm font-medium text-white transition hover:bg-ink/85 active:scale-[0.98]"
           >
             <CameraIcon size={24} />
             ถ่ายภาพใบหน้า
           </button>
           <button
             onClick={onFile}
-            className="flex flex-col items-center gap-2 rounded-2xl border border-line bg-white px-3 py-4 text-sm font-medium text-ink transition hover:border-[#cfcfcf] active:scale-[0.98]"
+            className="flex flex-col items-center gap-2 rounded-2xl border border-line bg-white px-3 py-4 text-sm font-medium text-ink transition hover:border-ink/25 active:scale-[0.98]"
           >
             <SmileIcon size={24} />
             ใช้ภาพใบหน้า
@@ -651,7 +681,7 @@ function PhotoBrowser({
                   onClick={() => download(ids)}
                   disabled={zipping || ids.length > 100}
                   title={ids.length > 100 ? "ดาวน์โหลดได้ครั้งละไม่เกิน 100 รูป" : undefined}
-                  className="hidden rounded-full bg-ink px-4 py-2 text-xs font-medium text-white transition hover:bg-black/80 disabled:opacity-40 sm:inline-flex"
+                  className="hidden rounded-full bg-ink px-4 py-2 text-xs font-medium text-white transition hover:bg-ink/85 disabled:opacity-40 sm:inline-flex"
                 >
                   {zipping ? "กำลังเตรียม…" : `ดาวน์โหลดทั้งหมด (${ids.length})`}
                 </button>
@@ -707,7 +737,7 @@ function PhotoBrowser({
               <button
                 onClick={() => download(selection.ids())}
                 disabled={!selection.count || zipping || selection.count > 100}
-                className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-white transition hover:bg-black/80 disabled:opacity-40"
+                className="rounded-full bg-ink px-4 py-2 text-sm font-medium text-white transition hover:bg-ink/85 disabled:opacity-40"
               >
                 {zipping ? "กำลังเตรียม…" : selection.count > 100 ? "เกิน 100 รูป" : `ดาวน์โหลด ${selection.count || ""}`}
               </button>
@@ -827,12 +857,10 @@ function ResultsView({
   onPick: () => void;
   onReset: () => void;
 }) {
-  const [minSim, setMinSim] = useState(0);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [undo, setUndo] = useState<{ id: string } | null>(null);
 
   useEffect(() => {
-    if (result) setMinSim(Math.round(result.threshold * 100));
     setHidden(new Set());
   }, [result]);
 
@@ -845,12 +873,10 @@ function ResultsView({
   const items: Item[] = useMemo(
     () =>
       (result?.results ?? [])
-        .filter((r) => r.similarity * 100 >= minSim && !hidden.has(r.photo.id))
+        .filter((r) => !hidden.has(r.photo.id))
         .map((r) => ({ photo: r.photo, similarity: r.similarity, face: r.face })),
-    [result, minSim, hidden],
+    [result, hidden],
   );
-
-  const threshold = result ? Math.round(result.threshold * 100) : 40;
 
   return (
     <section className="mt-6 lg:mt-8">
@@ -915,22 +941,6 @@ function ResultsView({
             <PhotoBrowser
               ctx={ctx}
               items={items}
-              toolbarLeft={
-                result.results.length > 0 && (
-                  <label className="flex items-center gap-3 text-xs text-muted">
-                    ความแม่นยำขั้นต่ำ
-                    <input
-                      type="range"
-                      className="range w-28 sm:w-36"
-                      min={threshold}
-                      max={90}
-                      value={minSim}
-                      onChange={(e) => setMinSim(Number(e.target.value))}
-                    />
-                    <span className="w-8 tabular-nums text-ink">{minSim}%</span>
-                  </label>
-                )
-              }
               onNotMe={(it) => {
                 setHidden((h) => new Set(h).add(it.photo.id));
                 setUndo({ id: it.photo.id });
@@ -941,7 +951,7 @@ function ResultsView({
               title="ไม่พบรูปที่ตรงกัน"
               body={
                 result.results.length > 0
-                  ? "ลองลดความแม่นยำขั้นต่ำลง"
+                  ? "คุณซ่อนรูปที่พบทั้งหมดแล้ว — กดค้นหาใหม่เพื่อดูอีกครั้ง"
                   : "ลองใช้รูปที่เห็นหน้าชัด มองตรง แสงสว่างพอ ไม่ใส่แว่นกันแดดหรือหน้ากาก"
               }
             />
@@ -1121,7 +1131,7 @@ function ConsentModal({ onAccept, onClose }: { onAccept: () => void; onClose: ()
         </li>
       </ul>
       <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-2xl border border-line p-3 text-sm">
-        <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[#0a0a0a]" />
+        <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} className="mt-0.5 h-4 w-4 accent-ink" />
         <span>
           ฉันยินยอมให้ประมวลผลข้อมูลใบหน้าเพื่อการค้นหารูป ตาม
           <Link href="/privacy" target="_blank" className="mx-1 underline underline-offset-4">
@@ -1151,6 +1161,13 @@ function HelpView({ event, onHowTo }: { event: PublicEvent; onHowTo: () => void 
         </span>
         <span className="text-muted">→</span>
       </button>
+      <Link href="/guide#attendee" className="flex items-center justify-between rounded-[22px] border border-line p-4 hover:bg-soft/60">
+        <span>
+          <span className="block text-sm font-medium">คู่มือใช้งานแบบละเอียด</span>
+          <span className="text-xs text-muted">ทุกขั้นตอนพร้อมภาพหน้าจอ</span>
+        </span>
+        <span className="text-muted">→</span>
+      </Link>
       <Link href="/privacy" className="flex items-center justify-between rounded-[22px] border border-line p-4 hover:bg-soft/60">
         <span>
           <span className="block text-sm font-medium">ความเป็นส่วนตัวและข้อมูลใบหน้า</span>

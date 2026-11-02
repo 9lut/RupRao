@@ -10,7 +10,11 @@ log = logging.getLogger(__name__)
 
 
 def client_ip(request: Request) -> str:
-    # Caddy replaces X-Forwarded-For with the real peer address (it does not trust client-sent values).
+    # Caddy sets X-Real-IP to the visitor's address (Cloudflare-aware, see Caddyfile); fall back to
+    # X-Forwarded-For, which Caddy rewrites to the real peer when the sender isn't a trusted proxy.
+    real = request.headers.get("x-real-ip")
+    if real:
+        return real.strip()
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
         return forwarded.split(",")[0].strip()

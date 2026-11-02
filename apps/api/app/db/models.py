@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Boolean, Float, ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
@@ -26,6 +26,24 @@ class PhotoStatus:
     FAILED = "FAILED"
 
 
+class Role:
+    SUPERADMIN = "superadmin"  # every event + manages organizer accounts
+    ORGANIZER = "organizer"  # only the events they own
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    username: Mapped[str] = mapped_column(String(64))
+    display_name: Mapped[str | None] = mapped_column(String(255))
+    password_hash: Mapped[str] = mapped_column(Text)
+    role: Mapped[str] = mapped_column(String(20), default=Role.ORGANIZER)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    last_login_at: Mapped[datetime | None] = mapped_column()
+
+
 class RemovalStatus:
     PENDING = "PENDING"
     APPROVED = "APPROVED"
@@ -43,6 +61,12 @@ class Event(Base):
     match_threshold: Mapped[float | None] = mapped_column(Float)
     expires_at: Mapped[datetime | None] = mapped_column()
     public_album: Mapped[bool] = mapped_column(Boolean, default=False)
+    theme: Mapped[str] = mapped_column(String(32), default="default")
+    theme_custom: Mapped[dict] = mapped_column(JSONB, default=dict)
+    banner_key: Mapped[str | None] = mapped_column(Text)
+    logo_key: Mapped[str | None] = mapped_column(Text)
+    favicon_key: Mapped[str | None] = mapped_column(Text)
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
 
@@ -63,6 +87,8 @@ class Photo(Base):
     status: Mapped[str] = mapped_column(String(50), default=PhotoStatus.PENDING)
     face_count: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text)
+    content_hash: Mapped[str | None] = mapped_column(String(64))  # SHA-256 of the uploaded file
+    phash: Mapped[str | None] = mapped_column(String(64))  # browser 256-bit dHash, for near-duplicates
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
     event: Mapped[Event] = relationship(back_populates="photos")

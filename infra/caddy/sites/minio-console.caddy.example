@@ -1,0 +1,8 @@
+# MinIO web console on its own subdomain (browse/backup photos in a browser). Copy to
+# minio-console.caddy and edit. It logs in with MINIO_ROOT_USER / MINIO_ROOT_PASSWORD, so only
+# enable it with a strong password — or skip it and use an SSH tunnel instead:
+#   gcloud compute ssh ruprao -- -L 9001:localhost:9001   then open http://localhost:9001
+s3.photos.example.com {
+	tls {$CADDY_TLS:internal}
+	reverse_proxy minio:9001
+}

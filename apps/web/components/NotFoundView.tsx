@@ -22,7 +22,7 @@ export default function NotFoundView({
       <h1 className="mt-8 text-2xl font-semibold tracking-tight">{title}</h1>
       <p className="mt-2 text-[15px] leading-relaxed text-muted">{body}</p>
       <div className="mt-8 flex flex-wrap justify-center gap-2">
-        <Link href="/" className="rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white transition hover:bg-black/80">
+        <Link href="/" className="rounded-full bg-ink px-5 py-2.5 text-sm font-medium text-white transition hover:bg-ink/85">
           ใส่รหัสอีเวนต์
         </Link>
         <Link href="/privacy" className="rounded-full border border-line px-5 py-2.5 text-sm transition hover:bg-soft">

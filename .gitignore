@@ -11,3 +11,7 @@ media/tutorial_build/
 *.tsbuildinfo
 .DS_Store
 Thumbs.db
+
+# TLS keys for Caddy (Cloudflare Origin Certificate)
+infra/caddy/certs/*.pem
+infra/caddy/certs/*.key

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useConfirm } from "@/components/Confirm";
+import OwnerSelect from "@/components/OwnerSelect";
 import { RupRaoMark } from "@/components/brand";
 import { adminApi } from "@/lib/api";
 
@@ -32,6 +33,7 @@ export default function NewEventPage() {
   const [code, setCode] = useState("");
   const [album, setAlbum] = useState(false);
   const [retention, setRetention] = useState(90);
+  const [ownerId, setOwnerId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,6 +90,7 @@ export default function NewEventPage() {
         retention_days: retention || null,
         no_expiry: retention === 0,
         public_album: album,
+        owner_id: ownerId,
       });
       router.push(`/admin/events/${ev.id}?created=1`);
     } catch (err) {
@@ -132,6 +135,7 @@ export default function NewEventPage() {
                 className={`${field} mt-2 resize-none`}
               />
             </label>
+            <OwnerSelect value={ownerId} onChange={setOwnerId} className="mt-4" />
           </Section>
 
           {/* 2. Access */}

@@ -1,5 +1,30 @@
+import type { ThemeCustom } from "./themes";
+
+export type EventAsset = "banner" | "logo" | "favicon";
+
 // Same-origin by default: Caddy serves the API under /api.
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "/api";
+
+export type Role = "superadmin" | "organizer";
+
+export interface AdminMe {
+  username: string;
+  display_name: string | null;
+  role: Role;
+  /** The super admin from .env (not a stored account). */
+  builtin: boolean;
+}
+
+export interface AdminUser {
+  id: string;
+  username: string;
+  display_name: string | null;
+  role: Role;
+  active: boolean;
+  created_at: string;
+  last_login_at: string | null;
+  event_count: number;
+}
 
 export type PhotoStatus = "PENDING" | "PROCESSING" | "PROCESSED" | "FAILED";
 
@@ -13,6 +38,13 @@ export interface AdminEvent {
   effective_threshold: number;
   expires_at: string | null;
   public_album: boolean;
+  theme: string;
+  theme_custom: ThemeCustom;
+  banner_url: string | null;
+  logo_url: string | null;
+  favicon_url: string | null;
+  owner_id: string | null;
+  owner_name: string | null;
   created_at: string;
   photo_count: number;
   face_count: number;
@@ -30,6 +62,11 @@ export interface PublicEvent {
   photo_count: number;
   threshold: number;
   public_album: boolean;
+  theme: string;
+  theme_custom: ThemeCustom;
+  banner_url: string | null;
+  logo_url: string | null;
+  favicon_url: string | null;
 }
 
 export interface Photo {
@@ -207,7 +244,14 @@ export const adminApi = {
     const { token } = await json<{ token: string }>("/auth/login", { method: "POST", ...jsonBody({ username, password }) });
     session.set(token);
   },
-  me: () => admin<{ username: string }>("/auth/me"),
+  me: () => admin<AdminMe>("/auth/me"),
+  listUsers: () => admin<AdminUser[]>("/admin/users"),
+  createUser: (body: { username: string; password: string; display_name?: string | null; role: Role }) =>
+    admin<AdminUser>("/admin/users", { method: "POST", ...jsonBody(body) }),
+  updateUser: (id: string, body: { display_name?: string | null; password?: string; role?: Role; active?: boolean }) =>
+    admin<AdminUser>(`/admin/users/${id}`, { method: "PATCH", ...jsonBody(body) }),
+  deleteUser: (id: string) => admin<void>(`/admin/users/${id}`, { method: "DELETE" }),
+  photoHashes: (eventId: string) => admin<{ content_hashes: string[]; phashes: string[] }>(`/admin/events/${eventId}/photo-hashes`),
   stats: () => admin<AdminStats>("/admin/stats"),
   listEvents: () => admin<AdminEvent[]>("/admin/events"),
   getEvent: (id: string) => admin<AdminEvent>(`/admin/events/${id}`),
@@ -218,9 +262,17 @@ export const adminApi = {
     retention_days?: number | null;
     no_expiry?: boolean;
     public_album?: boolean;
+    owner_id?: string | null;
   }) => admin<AdminEvent>("/admin/events", { method: "POST", ...jsonBody(body) }),
-  updateEvent: (id: string, body: Partial<Pick<AdminEvent, "name" | "description" | "access_code" | "match_threshold" | "expires_at" | "public_album">>) =>
+  updateEvent: (id: string, body: Partial<Pick<AdminEvent, "name" | "description" | "access_code" | "match_threshold" | "expires_at" | "public_album" | "theme" | "theme_custom" | "owner_id">>) =>
     admin<AdminEvent>(`/admin/events/${id}`, { method: "PATCH", ...jsonBody(body) }),
+  /** Event page look: background photo, logo, or browser-tab icon. */
+  uploadAsset: (id: string, asset: EventAsset, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return admin<AdminEvent>(`/admin/events/${id}/assets/${asset}`, { method: "POST", body: form });
+  },
+  removeAsset: (id: string, asset: EventAsset) => admin<AdminEvent>(`/admin/events/${id}/assets/${asset}`, { method: "DELETE" }),
   rotateLink: (id: string) => admin<AdminEvent>(`/admin/events/${id}/rotate-link`, { method: "POST" }),
   deleteEvent: (id: string) => admin<void>(`/admin/events/${id}`, { method: "DELETE" }),
   calibrate: (id: string) => admin<Calibration>(`/admin/events/${id}/calibrate`, { method: "POST" }),
@@ -240,11 +292,18 @@ export const adminApi = {
 };
 
 /** Upload with progress (fetch has no upload progress events). */
-export function uploadPhotos(eventId: string, files: File[], onProgress: (fraction: number) => void): Promise<UploadResult> {
+/** `phashes`: perceptual hashes from the pre-upload check, one per file (stored for later duplicate checks). */
+export function uploadPhotos(
+  eventId: string,
+  files: File[],
+  onProgress: (fraction: number) => void,
+  phashes?: (string | null)[],
+): Promise<UploadResult> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const form = new FormData();
     files.forEach((f) => form.append("files", f));
+    if (phashes) form.append("phashes", JSON.stringify(phashes));
     xhr.open("POST", `${API_URL}/admin/events/${eventId}/photos`);
     const token = session.get();
     if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);

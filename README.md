@@ -292,9 +292,12 @@ S3_BUCKET=ruprao-production
 S3_REGION=auto
 S3_AUTO_CREATE_BUCKET=false
 
-# กำหนดโดเมนจริง (Caddy จะออก SSL Let's Encrypt ให้อัตโนมัติ)
+# กำหนดโดเมนจริง + อีเมล (Caddy จะออก SSL Let's Encrypt ให้อัตโนมัติ)
 SITE_ADDRESS=ruprao.yourdomain.com
+CADDY_TLS=you@example.com
 ```
+
+ไม่มีโดเมน? ดู **[คู่มือขึ้น Google Cloud VM](docs/deploy-gcp.md)** — ใช้ `<IP>.sslip.io` ได้ HTTPS จริงฟรี
 
 ---
 

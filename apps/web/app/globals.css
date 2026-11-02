@@ -14,9 +14,15 @@ html {
 }
 
 body {
-  background: #ffffff;
+  background: var(--page-bg, #ffffff);
+  background-attachment: fixed;
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Event themes: the event page sets data-theme and the color variables on <html> (lib/themes.ts). */
+:root[data-theme] header:not([data-overlay="clear"]) {
+  background: color-mix(in srgb, var(--color-soft) 80%, transparent);
 }
 
 /* Skeleton shimmer */
@@ -74,7 +80,7 @@ input[type="range"].range::-moz-range-thumb {
   border-radius: 2px;
   pointer-events: none;
   background: linear-gradient(90deg, transparent, var(--color-accent) 20%, var(--color-accent) 80%, transparent);
-  box-shadow: 0 0 10px 2px rgba(0, 93, 251, 0.45);
+  box-shadow: 0 0 10px 2px color-mix(in srgb, var(--color-accent) 45%, transparent);
   animation: scan-y 1.6s ease-in-out infinite alternate;
 }
 /* Soft light trailing the line */
@@ -85,12 +91,12 @@ input[type="range"].range::-moz-range-thumb {
   right: 0;
   height: 18px;
   top: -9px;
-  background: radial-gradient(50% 50% at 50% 50%, rgba(0, 93, 251, 0.22), transparent);
+  background: radial-gradient(50% 50% at 50% 50%, color-mix(in srgb, var(--color-accent) 22%, transparent), transparent);
 }
 .scan-line.on-photo {
   left: 12%;
   right: 12%;
-  box-shadow: 0 0 14px 3px rgba(0, 93, 251, 0.6);
+  box-shadow: 0 0 14px 3px color-mix(in srgb, var(--color-accent) 60%, transparent);
 }
 @keyframes scan-y {
   from { top: 16%; }

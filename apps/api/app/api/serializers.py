@@ -2,7 +2,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.db.models import Event, Photo, PhotoStatus, RemovalRequest, RemovalStatus
+from app.db.models import Event, Photo, PhotoStatus, RemovalRequest, RemovalStatus, User
 from app.schemas.common import EventAdminOut, PhotoOut, PublicPhotoOut
 from app.services.storage_service import storage
 
@@ -12,6 +12,13 @@ def _urls(photo: Photo) -> dict:
         "url": storage.get_url(photo.storage_key),
         "thumbnail_url": storage.get_url(photo.thumbnail_key) if photo.thumbnail_key else None,
     }
+
+
+def _owner_name(db: Session, event: Event) -> str | None:
+    if event.owner_id is None:
+        return None
+    user = db.get(User, event.owner_id)
+    return (user.display_name or user.username) if user else None
 
 
 def photo_out(photo: Photo) -> PhotoOut:
@@ -70,6 +77,13 @@ def event_admin_out(db: Session, event: Event) -> EventAdminOut:
         effective_threshold=effective_threshold(event),
         expires_at=event.expires_at,
         public_album=event.public_album,
+        theme=event.theme,
+        theme_custom=event.theme_custom or {},
+        banner_url=storage.get_url(event.banner_key) if event.banner_key else None,
+        logo_url=storage.get_url(event.logo_key) if event.logo_key else None,
+        favicon_url=storage.get_url(event.favicon_key) if event.favicon_key else None,
+        owner_id=event.owner_id,
+        owner_name=_owner_name(db, event),
         created_at=event.created_at,
         photo_count=photo_count,
         face_count=face_count,
