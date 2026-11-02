@@ -5,7 +5,9 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.config import settings
 
-engine = create_engine(settings.database_url, pool_pre_ping=True)
+# Requests only hold a connection for their queries (searches release it during face inference),
+# so this comfortably covers a crowd; Postgres allows 100 connections.
+engine = create_engine(settings.database_url, pool_pre_ping=True, pool_size=10, max_overflow=20)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 

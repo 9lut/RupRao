@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     # --- Search ---
     search_default_threshold: float = 0.4
     search_max_results: int = 200
+    # Face AI runs one inference per CPU core at a time; extra searches wait their turn (fair and
+    # faster overall than every request fighting for the CPU) and give up with a 503 after this.
+    face_concurrency: int = 0  # 0 = number of CPU cores
+    search_queue_timeout: int = 45
     max_zip_photos: int = 100
 
     # --- Privacy / retention ---
@@ -56,12 +60,14 @@ class Settings(BaseSettings):
     cleanup_interval_minutes: int = 60
 
     # --- Rate limits (per client IP) ---
-    rate_search_per_minute: int = 10
-    rate_search_per_day: int = 200
+    # Per IP. At an event, a whole room shares one IP behind the venue Wi-Fi, so these are sized
+    # for a crowd; they only stop scripts hammering the server. Logins stay strict.
+    rate_search_per_minute: int = 120
+    rate_search_per_day: int = 5000
     rate_login_per_minute: int = 5
-    rate_access_per_minute: int = 10
-    rate_removal_per_hour: int = 5
-    rate_zip_per_hour: int = 20
+    rate_access_per_minute: int = 600  # every request to a code-protected event counts
+    rate_removal_per_hour: int = 60
+    rate_zip_per_hour: int = 300
 
 
 @lru_cache

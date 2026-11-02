@@ -35,11 +35,17 @@ def det_size_for(width: int, height: int) -> int:
     return max(320, min(size, settings.face_det_size_max) // 32 * 32)
 
 
+class FaceBusy(RuntimeError):
+    """Too many searches queued for the face model; the caller should retry shortly."""
+
+
 class FaceService:
     def __init__(self) -> None:
         self._app = None
         self._load_lock = threading.Lock()
-        # No inference lock: ONNX Runtime sessions are thread-safe.
+        # ONNX Runtime sessions are thread-safe, but running more inferences than CPU cores only
+        # makes every one of them slower; the gate queues the rest.
+        self._gate = threading.BoundedSemaphore(settings.face_concurrency or os.cpu_count() or 1)
 
     @property
     def ready(self) -> bool:
@@ -70,11 +76,20 @@ class FaceService:
             self._app = app
             log.info("Face model ready")
 
-    def detect(self, bgr: np.ndarray, det_size: int | None = None) -> list[DetectedFace]:
-        """Detect faces and embed each one. Returned list is sorted by face area, largest first."""
+    def detect(self, bgr: np.ndarray, det_size: int | None = None, wait: float | None = None) -> list[DetectedFace]:
+        """Detect faces and embed each one. Returned list is sorted by face area, largest first.
+        Waits for a free inference slot; with `wait` seconds set, raises FaceBusy when none frees up."""
+        self.load()
+        if not self._gate.acquire(timeout=wait):
+            raise FaceBusy
+        try:
+            return self._detect(bgr, det_size)
+        finally:
+            self._gate.release()
+
+    def _detect(self, bgr: np.ndarray, det_size: int | None) -> list[DetectedFace]:
         from insightface.app.common import Face
 
-        self.load()
         size = det_size or settings.face_det_size
         bboxes, kpss = self._app.det_model.detect(bgr, input_size=(size, size), max_num=0, metric="default")
         recognizer = self._app.models["recognition"]

@@ -43,33 +43,34 @@ export default function Header() {
             <span className={`hidden text-[11px] sm:inline ${clear ? "text-white/80" : "text-muted"}`}>ค้นหารูปด้วย รูปเรา</span>
           </span>
         ) : (
-        <Link href={inAdmin ? "/admin" : "/"} className={`flex items-center gap-2 ${clear ? "rounded-full bg-white/85 px-2.5 py-1 backdrop-blur" : ""}`}>
+        <Link href={inAdmin ? "/admin" : "/"} className={`flex shrink-0 items-center gap-2 whitespace-nowrap ${clear ? "rounded-full bg-white/85 px-2.5 py-1 backdrop-blur" : ""}`}>
           <Logo />
           {inAdmin && (
-            <span className="rounded-full bg-soft px-2 py-0.5 text-[11px] font-medium text-muted">
+            // No room for the role badge on phones; the menu already shows what you can do.
+            <span className="hidden rounded-full bg-soft px-2 py-0.5 text-[11px] font-medium text-muted sm:inline">
               {me?.role === "superadmin" ? "แอดมินใหญ่" : "ผู้จัดงาน"}
             </span>
           )}
         </Link>
         )}
-        <nav className="flex items-center gap-1 text-sm">
+        <nav className="flex min-w-0 items-center gap-0.5 whitespace-nowrap text-sm sm:gap-1">
           {inAdmin ? (
             <>
               <Link
                 href="/admin"
-                className={`rounded-full px-3 py-1.5 transition ${pathname === "/admin" ? "bg-soft text-ink" : "text-muted hover:text-ink"}`}
+                className={`rounded-full px-2.5 py-1.5 transition sm:px-3 ${pathname === "/admin" ? "bg-soft text-ink" : "text-muted hover:text-ink"}`}
               >
                 อีเวนต์
               </Link>
               {me?.role === "superadmin" && (
                 <Link
                   href="/admin/users"
-                  className={`rounded-full px-3 py-1.5 transition ${pathname.startsWith("/admin/users") ? "bg-soft text-ink" : "text-muted hover:text-ink"}`}
+                  className={`rounded-full px-2.5 py-1.5 transition sm:px-3 ${pathname.startsWith("/admin/users") ? "bg-soft text-ink" : "text-muted hover:text-ink"}`}
                 >
                   ผู้จัดงาน
                 </Link>
               )}
-              <Link href="/guide#organizer" className="rounded-full px-3 py-1.5 text-muted transition hover:text-ink">
+              <Link href="/guide#organizer" className="hidden rounded-full px-3 py-1.5 text-muted transition hover:text-ink sm:inline">
                 คู่มือ
               </Link>
               {me && (
@@ -82,9 +83,11 @@ export default function Header() {
                   session.clear();
                   location.href = "/admin/login";
                 }}
-                className="rounded-full px-3 py-1.5 text-muted transition hover:text-ink"
+                className="rounded-full px-2.5 py-1.5 text-muted transition hover:text-ink sm:px-3"
+                aria-label="ออกจากระบบ"
               >
-                ออกจากระบบ
+                <span className="sm:hidden">ออก</span>
+                <span className="hidden sm:inline">ออกจากระบบ</span>
               </button>
             </>
           ) : (

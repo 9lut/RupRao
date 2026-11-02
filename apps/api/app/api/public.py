@@ -20,7 +20,7 @@ from app.schemas.common import (
 )
 from app.services import rate_limit
 from app.services.auth import sign_value
-from app.services.face_service import face_service
+from app.services.face_service import FaceBusy, face_service
 from app.services.image_service import ImageValidationError, load_image, to_bgr_array
 from app.services.search_service import search_event
 from app.services.storage_service import storage
@@ -117,23 +117,32 @@ async def search(
     rate_limit.enforce(request, "search-day", settings.rate_search_per_day, 24 * 3600)
     started = time.perf_counter()
 
+    event_id, threshold = event.id, effective_threshold(event)
+    # Give the DB connection back while the CPU-heavy part runs: under a crowd, searches wait for
+    # the face model for seconds, and holding connections meanwhile exhausts the pool.
+    db.rollback()
+
     # The selfie lives only in memory for this request; it is never written to storage or the DB.
     data = await file.read(settings.max_upload_mb * 1024 * 1024 + 1)
     try:
-        img = load_image(data)
+        img = await run_in_threadpool(load_image, data)  # decoding a 12 MP photo would block the event loop
     except ImageValidationError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     finally:
         del data
 
-    faces = await run_in_threadpool(face_service.detect, to_bgr_array(img))
+    try:
+        faces = await run_in_threadpool(lambda: face_service.detect(to_bgr_array(img), None, settings.search_queue_timeout))
+    except FaceBusy as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, "ตอนนี้มีคนค้นหาพร้อมกันเยอะมาก ลองใหม่อีกครั้งในอีกสักครู่", headers={"Retry-After": "10"}
+        ) from exc
     if not faces:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "ไม่พบใบหน้าในรูป ลองใช้รูปที่เห็นหน้าชัดขึ้น")
     face_index = min(face_index, len(faces) - 1)
-    threshold = effective_threshold(event)
 
     matches = await run_in_threadpool(
-        search_event, db, event.id, faces[face_index].embedding, threshold, settings.search_max_results
+        search_event, db, event_id, faces[face_index].embedding, threshold, settings.search_max_results
     )
     return SearchResult(
         query_faces=[FaceBox(x=f.x, y=f.y, width=f.width, height=f.height) for f in faces],
