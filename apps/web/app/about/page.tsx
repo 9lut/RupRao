@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import BackButton from "@/components/BackButton";
-import { BRAND_ASSETS, deploymentCredits, RupRaoMark } from "@/components/brand";
+import { BRAND_ASSETS, deploymentCredits, ScanCorners } from "@/components/brand";
 
 export const metadata: Metadata = { title: "เกี่ยวกับเรา · รูปเรา (RupRao)" };
 // The credit comes from the server's environment, so render per request rather than at build.
@@ -74,34 +74,32 @@ export default function AboutPage() {
       </section>
 
       {/* ---------- developer ---------- */}
-      <section className="mt-16">
-        <p className="text-xs uppercase tracking-[0.2em] text-muted">Made by</p>
+      <section className="mt-16 rounded-[32px] bg-ink p-6 text-white sm:p-10">
+        <p className="text-xs uppercase tracking-[0.2em] text-white/60">Made by</p>
         <h2 className="mt-2 text-xl font-semibold">ผู้พัฒนา</h2>
-        <p className="mt-3 text-sm leading-relaxed text-muted">
+        <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/70">
           ออกแบบและพัฒนา รูปเรา (RupRao) ตั้งแต่ระบบ AI จดจำใบหน้า หลังบ้าน ไปจนถึงหน้าตาที่คุณใช้อยู่ —
           เพื่อให้ทุกงานแจกรูปได้ง่าย และทุกคนได้รูปของตัวเองอย่างปลอดภัย
         </p>
-        <div className="mt-6 space-y-4">
+        <ul className="mt-6 divide-y divide-white/10 border-t border-white/10">
           {credits.map((credit) => (
-            <div
-              key={credit.name}
-              className="flex flex-col items-center gap-5 rounded-[32px] border border-line bg-gradient-to-b from-white to-soft p-8 text-center sm:flex-row sm:text-left"
-            >
-              {credit.photo ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={credit.photo} alt={credit.name} className="h-24 w-24 shrink-0 rounded-full object-cover ring-4 ring-white shadow-md" />
-              ) : (
-                <div className="grid h-24 w-24 shrink-0 place-items-center rounded-full bg-white ring-1 ring-line">
-                  <RupRaoMark size={68} />
-                </div>
-              )}
-              <div>
-                <p className="text-sm text-muted">พัฒนาโดย</p>
-                <p className="mt-0.5 text-2xl font-semibold tracking-tight">{credit.name}</p>
-              </div>
-            </div>
+            <li key={credit.name} className="flex items-center gap-5 py-5 last:pb-0">
+              {/* The face-scan corners from the logo, framing each person. */}
+              <span className="relative block h-24 w-24 shrink-0">
+                <ScanCorners className="absolute -inset-2 h-28 w-28" />
+                {credit.photo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={credit.photo} alt="" className="absolute inset-3 h-[72px] w-[72px] rounded-full object-cover" />
+                ) : (
+                  <span aria-hidden className="absolute inset-3 grid place-items-center rounded-full bg-white text-3xl font-semibold text-ink">
+                    {credit.name.slice(0, 1)}
+                  </span>
+                )}
+              </span>
+              <p className="min-w-0 break-words text-2xl font-semibold tracking-tight">{credit.name}</p>
+            </li>
           ))}
-        </div>
+        </ul>
       </section>
 
       {/* ---------- cta ---------- */}
