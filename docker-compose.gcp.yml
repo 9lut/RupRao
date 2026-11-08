@@ -1,4 +1,4 @@
-# Overrides for a single cloud VM (GCP e2-standard-4: 4 vCPU, 16 GB; see docs/deploy-gcp.md).
+# Overrides for a single cloud VM (GCP e2-standard-2: 2 vCPU, 8 GB; see docs/deploy-gcp.md).
 #   docker compose -f docker-compose.yml -f docker-compose.gcp.yml up -d --build
 name: ai-photo-finder
 
@@ -20,14 +20,14 @@ services:
       MODEL_DIR: /app/models
       API_ROOT_PATH: /api
       API_DOCS: "false"  # no public map of the API
-      OMP_NUM_THREADS: "2"  # 2 threads per inference; the 2 workers take the other 2 vCPUs
+      OMP_NUM_THREADS: "2"  # 2 threads per inference, matching the 2 vCPUs
       FACE_CONCURRENCY: "1"  # the rest wait in the scan queue
   worker:
     <<: *logging
     mem_limit: 2000m
     cpu_shares: 512  # under contention the site (api) wins over scanning, but scanning isn't starved
     deploy:
-      replicas: 2  # one photo per worker at a time; each uses OMP_NUM_THREADS vCPUs
+      replicas: 1  # one photo at a time; raise to 2 (and the VM to e2-standard-4) for big scans
     restart: unless-stopped
     environment:
       MODEL_DIR: /app/models
