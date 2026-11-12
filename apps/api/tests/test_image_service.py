@@ -170,3 +170,29 @@ def test_rejects_disallowed_format():
     Image.new("RGB", (10, 10)).save(buf, "GIF")
     with pytest.raises(ImageValidationError):
         process_upload(buf.getvalue())
+
+
+def test_high_resolution_camera_photo_is_accepted_and_downscaled():
+    # Sony a7R IV: 9504 x 6336 (61 MP), more than the old 50 MP cap.
+    out = process_upload(_jpeg(9504, 6336, quality=70))
+    assert max(out.width, out.height) == 6000
+    assert abs(out.width / out.height - 9504 / 6336) < 0.01
+
+
+def test_portrait_camera_photo_keeps_orientation_when_downscaled():
+    img = Image.new("RGB", (8000, 5000))
+    exif = img.getexif()
+    exif[0x0112] = 6  # shot in portrait
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", exif=exif, quality=60)
+    out = process_upload(buf.getvalue())
+    assert (out.width, out.height) == (3750, 6000)
+
+
+def test_validation_messages_are_not_hidden_behind_generic_error():
+    buf = io.BytesIO()
+    Image.new("RGB", (10, 10)).save(buf, "GIF")
+    with pytest.raises(ImageValidationError, match="รองรับเฉพาะ"):
+        load_image(buf.getvalue())
+    with pytest.raises(ImageValidationError, match="ไม่ใช่รูปภาพ"):
+        load_image(b"definitely not an image")

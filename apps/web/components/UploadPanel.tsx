@@ -184,7 +184,7 @@ export default function UploadPanel({ eventId, onUploaded }: { eventId: string; 
                 </svg>
               </div>
               <p className="mt-3 text-[15px] font-medium">ลากรูปมาวาง หรือคลิกเพื่อเลือกหลายรูป</p>
-              <p className="mt-1 text-xs text-muted">JPEG, PNG, WebP, HEIC · สูงสุด 20 MB ต่อรูป</p>
+              <p className="mt-1 text-xs text-muted">JPEG, PNG, WebP, HEIC · สูงสุด 50 MB ต่อรูป</p>
             </>
           )}
         </div>

@@ -590,7 +590,7 @@ TRUSTED_PROXIES=private_ranges             # เชื่อ header จาก cl
 | เบราว์เซอร์เตือนใบรับรอง | `dc logs caddy` · แบบ 1: พอร์ต 80 ต้องเปิด และ DNS ต้องเป็นเมฆเทา · แบบ 2: SSL ต้องเป็น Full (strict) และไฟล์ origin.pem/key ต้องถูกที่ |
 | Cloudflare ขึ้น Error 521/522 | firewall ไม่เปิด 80/443 หรือ Caddy ไม่ทำงาน (`dc ps`) |
 | Cloudflare ขึ้น Error 525/526 | SSL mode ไม่ตรงกับใบรับรอง: แบบ 2 ต้องใช้ Origin Certificate + Full (strict) |
-| อัปโหลดไม่ผ่าน 413 | ไฟล์เดียวใหญ่เกิน 20 MB (ตั้ง `MAX_UPLOAD_MB`) |
+| อัปโหลดไม่ผ่าน 413 | ไฟล์เดียวใหญ่เกิน 50 MB (ตั้ง `MAX_UPLOAD_MB`) · รูปใหญ่กว่า 6000px ถูกย่อเก็บ (ตั้ง `MAX_PHOTO_SIDE`, 0 = เก็บเต็ม) |
 | api รีสตาร์ตวน | `dc logs api`, `free -h` · RAM ไม่พอ: ตรวจ swap (`swapon --show`) หรือขยายเครื่อง |
 | `/mnt/data` หายหลังรีบูต | `cat /etc/fstab` ต้องมีบรรทัด UUID ของดิสก์ · รัน `sudo mount -a` |
 | ดิสก์ใกล้เต็ม | ดูได้ที่เมนู "ภาพรวม" ของแอดมินใหญ่ (ระบบหยุดรับรูปเมื่อเหลือน้อยกว่า `STORAGE_MIN_FREE_GB`, ค่าเริ่มต้น 2 GB) · `df -h /mnt/data`, `docker system df` · ลบ image เก่า `docker image prune -a` · ขยายดิสก์ (ข้อ 14) |

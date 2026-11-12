@@ -29,22 +29,33 @@ class ProcessedImage:
 
 
 def load_image(data: bytes, keep_alpha: bool = False) -> Image.Image:
-    """Decode bytes, verify real image content (not the client-sent MIME), apply EXIF orientation."""
+    """Decode bytes, verify real image content (not the client-sent MIME), apply EXIF orientation,
+    and shrink anything larger than max_photo_side."""
     if not data:
         raise ImageValidationError("ไฟล์ว่างเปล่า")
     if len(data) > settings.max_upload_mb * 1024 * 1024:
         raise ImageValidationError(f"ไฟล์ใหญ่เกิน {settings.max_upload_mb} MB")
+    limit = settings.max_photo_side
     try:
         img = Image.open(io.BytesIO(data))
         if img.format not in ALLOWED_FORMATS:
             raise ImageValidationError("รองรับเฉพาะ JPEG, PNG, WebP, HEIC")
         if img.width * img.height > settings.max_image_pixels:
-            raise ImageValidationError("ความละเอียดภาพสูงเกินไป")
+            raise ImageValidationError(f"ความละเอียดภาพสูงเกินไป (สูงสุด {settings.max_image_pixels // 1_000_000} ล้านพิกเซล)")
         source_format = img.format
+        if limit and img.format == "JPEG" and max(img.size) >= 2 * limit:
+            # Let the JPEG decoder scale down by 1/2, 1/4… while decoding: a 61 MP photo then never
+            # occupies ~180 MB of memory at full size.
+            scale = limit / max(img.size)
+            img.draft("RGB", (int(img.width * scale) + 1, int(img.height * scale) + 1))
         img.load()
+    except ImageValidationError:
+        raise
     except (UnidentifiedImageError, Image.DecompressionBombError, OSError, ValueError) as exc:
-        raise ImageValidationError("ไฟล์ไม่ใช่รูปภาพที่ถูกต้อง") from exc
+        raise ImageValidationError("ไฟล์ไม่ใช่รูปภาพที่ถูกต้อง หรือไฟล์เสีย") from exc
     img = ImageOps.exif_transpose(img).convert("RGBA" if keep_alpha else "RGB")
+    if limit and max(img.size) > limit:
+        img.thumbnail((limit, limit), Image.Resampling.LANCZOS)
     img.info["source_format"] = source_format
     return img
 

@@ -41,8 +41,11 @@ class Settings(BaseSettings):
     face_min_size: int = 20
 
     # --- Uploads ---
-    max_upload_mb: int = 20
-    max_image_pixels: int = 50_000_000
+    max_upload_mb: int = 50  # extra-fine JPEGs from 60 MP+ cameras run 30-40 MB
+    max_image_pixels: int = 200_000_000  # decompression-bomb guard; medium format is ~100 MP
+    # Photos are stored with their long side at most this many pixels (0 = keep full size). 6000 px
+    # is still ~24 MP: plenty for prints, a quarter of the storage of a 61 MP original, faster scans.
+    max_photo_side: int = 6000
     max_files_per_upload: int = 50
     thumbnail_size: int = 720
 
